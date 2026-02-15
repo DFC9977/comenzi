@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comenzi Gosbi</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">G</div>
+      <div>
+        <div class="title">Comenzi Gosbi</div>
+        <div class="subtitle" id="sessionInfo">Neautentificat</div>
+      </div>
+    </div>
+
+    <div class="actions">
+  <!-- Admin clienți -->
+  <button id="btnAdmin" class="btn ghost" style="display:none;">Admin</button>
+
+  <!-- Admin comenzi -->
+  <button id="btnOrdersAdmin" class="btn ghost" style="display:none;">Comenzi</button>
+
+  <button id="btnLogout" class="btn ghost" hidden>Logout</button>
+</div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="container">
+
+    <!-- LOADING -->
+    <section id="screenLoading" class="card">
+      <h2>Se încarcă…</h2>
+      <p class="muted">Verific sesiunea și profilul.</p>
+    </section>
+
+    <!-- LOGIN -->
+    <section id="screenLogin" class="card" hidden>
+      <h2>Autentificare</h2>
+      <p class="muted">Login cu telefon + parolă (prin Email/Password)</p>
+
+      <div class="grid">
+        <label class="field">
+          <span>Telefon</span>
+          <input id="loginPhone" type="tel" inputmode="tel" placeholder="07xxxxxxxx" autocomplete="username" />
+        </label>
+
+        <label class="field">
+          <span>Parolă</span>
+          <input id="loginPass" type="password" placeholder="Parola" autocomplete="current-password" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="btnLogin" class="btn primary">Login</button>
+        <button id="btnRegister" class="btn">Creează cont</button>
+      </div>
+
+      <div id="loginMsg" class="note" hidden></div>
+    </section>
+
+    <!-- CONTACT GATE -->
+    <section id="screenContactGate" class="card" hidden>
+      <h2>Date de contact</h2>
+      <p class="muted">Pentru a vedea produsele, te rugăm să completezi datele de contact.</p>
+
+      <div class="grid">
+
+        <label class="field">
+          <span>Nume complet</span>
+          <input id="fullName" placeholder="Nume Prenume" />
+        </label>
+
+        <label class="field">
+          <span>Adresă completă</span>
+          <textarea id="address" rows="3" placeholder="Stradă, nr., bloc, sc., ap., etc."></textarea>
+        </label>
+
+        <label class="field">
+          <span>Județ</span>
+          <select id="countySelect">
+            <option value="">Selectează județ</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Localitate</span>
+          <input id="cityInput" list="cityList" disabled />
+          <datalist id="cityList"></datalist>
+          <div class="hint">Localitatea se activează după alegerea județului.</div>
+        </label>
+
+      </div>
+
+      <div class="row">
+        <button id="btnSaveContact" class="btn primary">Salvează și continuă</button>
+        <button id="btnBackToLogin" class="btn ghost">Înapoi</button>
+      </div>
+
+      <div id="contactMsg" class="note" hidden></div>
+    </section>
+
+    <!-- CATALOG -->
+    <section id="screenCatalog" class="card" hidden>
+      <div class="row between">
+        <div>
+          <h2>Catalog</h2>
+          <p id="catalogHint" class="muted"></p>
+        </div>
+
+        <button id="btnRefreshProducts" class="btn">Refresh</button>
+      </div>
+
+      <div id="productsGrid" class="products"></div>
+    </section>
+
+    <!-- ADMIN (în aceeași aplicație, nu tab nou) -->
+    <section id="screenAdmin" class="card" hidden>
+      <div class="row between">
+        <div>
+          <h2>Admin</h2>
+          <p class="muted">Aprobări clienți / adaos / recomandări</p>
+        </div>
+        <button id="btnBackToCatalog" class="btn">Înapoi la catalog</button>
+      </div>
+
+      <iframe
+        id="adminFrame"
+        src="./admin.html"
+        style="width:100%; height:75vh; border:0; border-radius:14px;"
+      ></iframe>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span class="muted">v1 • Firebase Spark • GitHub Pages</span>
+  </footer>
+
+ <script type="module" src="./js/app.js?v=40"></script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("./sw.js")
+        .catch((e) => console.warn("SW register failed:", e));
+    });
+  }
+</script>
+
+</body>
+</html>
+

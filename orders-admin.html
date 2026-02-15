@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin - Comenzi</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #0f1720;
+      color: #fff;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 30px auto;
+      padding: 0 16px;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    .order-card {
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 14px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .order-header {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .order-lines {
+      margin-top: 10px;
+      border-top: 1px dashed rgba(255,255,255,0.2);
+      padding-top: 10px;
+    }
+
+    select, button {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: transparent;
+      color: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .line {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Administrare Comenzi</h1>
+
+  <div style="margin-bottom:15px;">
+    <select id="filterStatus">
+      <option value="ALL">Toate</option>
+      <option value="NEW">NEW</option>
+      <option value="CONFIRMED">CONFIRMED</option>
+      <option value="SENT">SENT</option>
+      <option value="DELIVERED">DELIVERED</option>
+      <option value="CANCELED">CANCELED</option>
+    </select>
+
+    <button id="refreshBtn" class="primary">Refresh</button>
+  </div>
+
+  <div id="ordersList"></div>
+</div>
+
+<script type="module" src="./js/adminOrders.js?v=1"></script>
+
+</body>
+</html>

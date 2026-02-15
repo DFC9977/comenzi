@@ -1,0 +1,733 @@
+// js/catalog.js
+// Exports: loadProducts(db), renderProducts(productsGrid, items, opts)
+//
+// ✅ Mobile-first cart UX:
+// - Qty controls (+/− + input) inside product card
+// - Checkout bar: mobile bottom fixed, desktop top fixed centered
+// - Summary drawer: "Produs × qty", unit price, line total + remove
+//
+// NOTE: "Trimite comanda" dispatches: catalog:submitOrderRequested
+
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+import {
+  getCart,
+  increment,
+  setQuantity,
+  getItemCount,
+  getItemsArray
+} from "./cart.js";
+
+let _categoriesCache = null;
+let _lastItems = [];
+let _selectedCategoryId = "ALL";
+let _lastRenderOpts = { showPrices: false, db: null, priceRules: null };
+
+/* =========================
+   Helpers
+========================= */
+
+function asNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatMoney(v) {
+  const n = asNumber(v);
+  return (Math.round(n * 100) / 100).toLocaleString("ro-RO", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+}
+
+function uniq(arr) {
+  return [...new Set(arr)];
+}
+
+function ensureGridLayout(productsGrid) {
+  if (!productsGrid) return;
+
+  productsGrid.style.display = "grid";
+  productsGrid.style.gridTemplateColumns = "repeat(auto-fill, minmax(260px, 1fr))";
+  productsGrid.style.gap = "16px";
+  productsGrid.style.alignItems = "stretch";
+  productsGrid.style.justifyItems = "stretch";
+  productsGrid.style.width = "100%";
+  productsGrid.style.boxSizing = "border-box";
+}
+
+/* =========================
+   Categories
+========================= */
+
+async function loadCategories(db) {
+  if (_categoriesCache) return _categoriesCache;
+
+  const snap = await getDocs(
+    query(
+      collection(db, "categories"),
+      where("active", "==", true),
+      orderBy("sortOrder"),
+      limit(500)
+    )
+  );
+
+  const cats = [];
+  snap.forEach((d) => {
+    const data = d.data() || {};
+    cats.push({
+      id: d.id,
+      name: String(data.name || d.id),
+      sortOrder: asNumber(data.sortOrder),
+      active: data.active !== false
+    });
+  });
+
+  _categoriesCache = cats;
+  return cats;
+}
+
+function findCategoriesHost(productsGrid) {
+  const screen = document.getElementById("screenCatalog") || document.body;
+
+  const sidebar =
+    screen.querySelector("#categoriesRail") ||
+    screen.querySelector("#categories") ||
+    screen.querySelector(".categories-rail") ||
+    screen.querySelector(".catalog-sidebar") ||
+    screen.querySelector(".sidebar-categories") ||
+    screen.querySelector("[data-categories]");
+
+  if (sidebar) return { el: sidebar, mode: "sidebar" };
+
+  let top = screen.querySelector("#categoriesTopBar");
+  if (!top) {
+    top = document.createElement("div");
+    top.id = "categoriesTopBar";
+    top.style.display = "flex";
+    top.style.flexWrap = "wrap";
+    top.style.gap = "8px";
+    top.style.margin = "12px 0 16px 0";
+    top.style.alignItems = "center";
+    top.style.justifyContent = "flex-start";
+
+    const parent = productsGrid?.parentElement || screen;
+    parent.insertBefore(top, productsGrid);
+  }
+  return { el: top, mode: "top" };
+}
+
+function makeCatButton(label, isActive) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = label;
+
+  b.style.padding = "10px 12px";
+  b.style.borderRadius = "12px";
+  b.style.border = isActive
+    ? "1px solid rgba(255,255,255,0.6)"
+    : "1px solid rgba(255,255,255,0.2)";
+  b.style.background = isActive ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)";
+  b.style.color = "inherit";
+  b.style.cursor = "pointer";
+  b.style.whiteSpace = "nowrap";
+
+  return b;
+}
+
+function renderCategoriesUI(productsGrid, categories, allowedCategoryIds) {
+  const host = findCategoriesHost(productsGrid);
+
+  if (host.mode === "sidebar") {
+    host.el.style.display = "flex";
+    host.el.style.flexDirection = "column";
+    host.el.style.gap = "10px";
+    host.el.style.padding = host.el.style.padding || "12px";
+  }
+
+  const visibleCats = categories.filter((c) => allowedCategoryIds.includes(c.id));
+  const list = [{ id: "ALL", name: "Toate" }, ...visibleCats];
+
+  host.el.innerHTML = "";
+  list.forEach((c) => {
+    const btn = makeCatButton(c.name, _selectedCategoryId === c.id);
+    btn.addEventListener("click", () => {
+      _selectedCategoryId = c.id;
+      renderProducts(productsGrid, _lastItems, _lastRenderOpts);
+    });
+    host.el.appendChild(btn);
+  });
+}
+
+/* =========================
+   Pricing (kept for compatibility)
+========================= */
+
+function getMarkupForProduct(p, priceRules) {
+  const catId = String(p?.categoryId || "");
+  const byCat = priceRules?.categories?.[catId];
+  if (byCat !== undefined && byCat !== null && byCat !== "") return asNumber(byCat);
+  return asNumber(priceRules?.globalMarkup);
+}
+
+function getBaseGrossPrice(p) {
+  return asNumber(p?.priceGross ?? p?.basePrice ?? p?.base_price ?? p?.price ?? 0);
+}
+
+function computeFinalPrice(p, showPrice, priceRules) {
+  if (!showPrice) return null;
+  const base = getBaseGrossPrice(p);
+  const markup = getMarkupForProduct(p, priceRules); // %
+  return Math.round(base * (1 + markup / 100) * 100) / 100;
+}
+
+/* =========================
+   Cart helpers + snapshot map
+========================= */
+
+function getQtyFromCart(productId) {
+  const cart = getCart();
+  return Number(cart.items?.[productId] || 0);
+}
+
+function buildProductsFinalById() {
+  const map = {};
+  _lastItems.forEach((p) => {
+    const finalPrice = computeFinalPrice(p, true, _lastRenderOpts.priceRules) ?? 0;
+    map[p.id] = { ...p, priceFinal: finalPrice };
+  });
+
+  // expose for orders.js snapshot
+  window.__PRODUCTS_FINAL_BY_ID__ = map;
+
+  return map;
+}
+
+function computeCartTotalUsingFinalPrices() {
+  const productsById = buildProductsFinalById();
+  const arr = getItemsArray();
+  let total = 0;
+
+  for (const it of arr) {
+    const p = productsById[it.productId];
+    if (!p) continue;
+    total += Number(p.priceFinal || 0) * Number(it.qty || 0);
+  }
+
+  return Math.round(total * 100) / 100;
+}
+
+function buildCartSummaryLines() {
+  const productsById = buildProductsFinalById();
+  const items = getItemsArray()
+    .filter((x) => Number(x.qty) > 0)
+    .map((x) => {
+      const p = productsById[x.productId];
+      const name = String(p?.name || "Produs");
+      const unit = Number(p?.priceFinal || 0);
+      const qty = Number(x.qty || 0);
+      const lineTotal = Math.round(unit * qty * 100) / 100;
+
+      return { productId: x.productId, name, unit, qty, lineTotal };
+    });
+
+  items.sort((a, b) => a.name.localeCompare(b.name, "ro"));
+  return items;
+}
+
+/* =========================
+   Product Card
+========================= */
+
+function productCardHTML(p, showPrice, priceRules) {
+  const id = String(p.id || "");
+  const name = String(p.name || "");
+  const finalPrice = computeFinalPrice(p, showPrice, priceRules);
+  const qty = showPrice ? getQtyFromCart(id) : 0;
+
+  return `
+    <div class="product-card"
+         data-product-id="${id}"
+         style="border:1px solid rgba(255,255,255,0.10); border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:10px;">
+      
+      <div style="font-weight:700; line-height:1.25; font-size:16px;">${name}</div>
+
+      <div style="opacity:0.9; font-size:14px;">
+        ${
+          showPrice
+            ? `Preț: <b>${formatMoney(finalPrice)} lei</b>`
+            : `Prețuri vizibile doar pentru clienți activi`
+        }
+      </div>
+
+      ${
+        showPrice
+          ? `
+          <div style="display:flex; align-items:center; gap:10px; margin-top:4px;">
+            <button type="button" data-action="dec"
+              aria-label="Scade cantitatea"
+              style="width:44px; height:40px; border-radius:12px; border:1px solid rgba(255,255,255,0.18); background:transparent; color:inherit; font-size:20px; cursor:pointer;">−</button>
+
+            <input data-role="qty" type="number" min="0" inputmode="numeric" value="${qty}"
+              style="width:72px; height:40px; border-radius:12px; border:1px solid rgba(255,255,255,0.18); background:transparent; color:inherit; text-align:center; padding:0 8px; font-size:16px;" />
+
+            <button type="button" data-action="inc"
+              aria-label="Crește cantitatea"
+              style="width:44px; height:40px; border-radius:12px; border:1px solid rgba(255,255,255,0.18); background:transparent; color:inherit; font-size:20px; cursor:pointer;">+</button>
+
+            <div style="flex:1;"></div>
+
+            <button type="button" data-action="add"
+              style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; font-weight:600;">
+              Adaugă
+            </button>
+          </div>
+          `
+          : `
+          <button type="button" disabled
+            style="width:100%; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.15); background:transparent; color:inherit; opacity:0.6;">
+            Comandă (indisponibil)
+          </button>
+          `
+      }
+    </div>
+  `;
+}
+
+/* =========================
+   Checkout Bar + Summary Drawer
+========================= */
+
+function ensureCheckoutBarCSSOnce() {
+  if (document.getElementById("stickyCartBarStyle")) return;
+
+  const style = document.createElement("style");
+  style.id = "stickyCartBarStyle";
+  style.textContent = `
+    #stickyCartBar {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      top: auto;
+      transform: none;
+      z-index: 9999;
+    }
+    @media (min-width: 900px) {
+      #stickyCartBar {
+        top: 16px;
+        bottom: auto;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: min(760px, calc(100vw - 24px));
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureStickyCartBar() {
+  let bar = document.getElementById("stickyCartBar");
+  if (bar) return bar;
+
+  ensureCheckoutBarCSSOnce();
+
+  bar = document.createElement("div");
+  bar.id = "stickyCartBar";
+
+  bar.style.borderRadius = "16px";
+  bar.style.padding = "12px";
+  bar.style.display = "flex";
+  bar.style.flexDirection = "column";
+  bar.style.gap = "10px";
+  bar.style.border = "1px solid rgba(255,255,255,0.18)";
+  bar.style.background = "rgba(15, 15, 18, 0.92)";
+  bar.style.backdropFilter = "blur(10px)";
+  bar.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+
+  bar.innerHTML = `
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:12px; opacity:0.85;">Coș</div>
+        <div id="stickyCartMeta" style="font-size:14px; font-weight:900;">0 produse</div>
+        <div id="stickyCartTotal" style="font-size:13px; opacity:0.92; margin-top:2px;">0 lei</div>
+      </div>
+
+      <button id="btnOpenSummary"
+        type="button"
+        style="padding:12px 14px; border-radius:14px; border:1px solid rgba(255,255,255,0.22); background:rgba(255,255,255,0.06); color:inherit; font-weight:900; cursor:pointer;">
+        Detalii
+      </button>
+
+      <button id="btnSubmitOrder"
+        type="button"
+        style="padding:12px 14px; border-radius:14px; border:1px solid rgba(255,255,255,0.22); background:rgba(255,255,255,0.10); color:inherit; font-weight:900; cursor:pointer;">
+        Trimite comanda
+      </button>
+    </div>
+
+    <div id="cartSummaryWrap" style="display:none; border-top:1px solid rgba(255,255,255,0.10); padding-top:10px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+        <div style="font-weight:900;">Sumar</div>
+        <button id="btnCloseSummary" type="button"
+          style="background:transparent; border:1px solid rgba(255,255,255,0.18); color:inherit; border-radius:12px; padding:6px 10px; cursor:pointer;">
+          Închide
+        </button>
+      </div>
+
+      <div id="cartSummaryDrawer"
+        style="display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow:auto;">
+      </div>
+
+      <div style="border-top:1px dashed rgba(255,255,255,0.18); margin-top:10px; padding-top:10px; display:flex; align-items:center; justify-content:space-between;">
+        <div style="opacity:0.9;">Total</div>
+        <div id="cartSummaryTotal" style="font-weight:900;">0 lei</div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(bar);
+
+  // Open / close summary
+  const open = () => {
+    const wrap = bar.querySelector("#cartSummaryWrap");
+    wrap.style.display = "block";
+    renderCartSummaryIntoBar(bar);
+    applyBodyPaddingForCheckoutBar(true);
+  };
+
+  const close = () => {
+    bar.querySelector("#cartSummaryWrap").style.display = "none";
+    applyBodyPaddingForCheckoutBar(false);
+  };
+
+  bar.querySelector("#btnOpenSummary").addEventListener("click", open);
+  bar.querySelector("#btnCloseSummary").addEventListener("click", close);
+
+  // remove line item (event delegation inside drawer)
+  bar.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-remove-id]");
+    if (!btn) return;
+    const productId = btn.getAttribute("data-remove-id");
+    if (!productId) return;
+
+    setQuantity(productId, 0);
+    updateStickyCartBarVisibilityAndData();
+
+    // keep open + re-render
+    const wrap = bar.querySelector("#cartSummaryWrap");
+    if (wrap.style.display !== "none") {
+      renderCartSummaryIntoBar(bar);
+    }
+  });
+
+  // submit
+  bar.querySelector("#btnSubmitOrder").addEventListener("click", () => {
+    const count = getItemCount();
+    if (count <= 0) return alert("Coșul este gol.");
+    window.dispatchEvent(new CustomEvent("catalog:submitOrderRequested"));
+  });
+
+  // padding for mobile so bar doesn't cover content
+  applyBodyPaddingForCheckoutBar(false);
+
+  // update padding on resize (once)
+  if (!window.__checkoutBarResizeBound) {
+    window.__checkoutBarResizeBound = true;
+    window.addEventListener("resize", () => {
+      const wrap = bar.querySelector("#cartSummaryWrap");
+      const openNow = wrap && wrap.style.display !== "none";
+      applyBodyPaddingForCheckoutBar(openNow);
+    });
+  }
+
+  return bar;
+}
+
+function applyBodyPaddingForCheckoutBar(summaryOpen) {
+  const isMobile = window.matchMedia("(max-width: 899px)").matches;
+  if (!isMobile) {
+    document.body.style.paddingBottom = "";
+    return;
+  }
+  // more padding when summary is open (drawer grows)
+  document.body.style.paddingBottom = summaryOpen ? "220px" : "140px";
+}
+
+function renderCartSummaryIntoBar(bar) {
+  const lines = buildCartSummaryLines();
+  const drawer = bar.querySelector("#cartSummaryDrawer");
+  const totalEl = bar.querySelector("#cartSummaryTotal");
+
+  drawer.innerHTML = "";
+
+  if (!lines.length) {
+    const empty = document.createElement("div");
+    empty.style.opacity = "0.8";
+    empty.textContent = "Coșul este gol.";
+    drawer.appendChild(empty);
+    totalEl.textContent = "0 lei";
+    return;
+  }
+
+  lines.forEach((it) => {
+    const row = document.createElement("div");
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "1fr auto";
+    row.style.gap = "10px";
+    row.style.alignItems = "center";
+    row.style.padding = "10px";
+    row.style.border = "1px solid rgba(255,255,255,0.10)";
+    row.style.borderRadius = "12px";
+    row.style.background = "rgba(255,255,255,0.03)";
+
+    const left = document.createElement("div");
+    left.style.minWidth = "0";
+
+    const name = document.createElement("div");
+    name.style.fontSize = "14px";
+    name.style.fontWeight = "900";
+    name.style.whiteSpace = "nowrap";
+    name.style.overflow = "hidden";
+    name.style.textOverflow = "ellipsis";
+    name.textContent = it.name;
+
+    const meta = document.createElement("div");
+    meta.style.fontSize = "12px";
+    meta.style.opacity = "0.9";
+    meta.style.marginTop = "2px";
+    meta.textContent = `${it.qty} × ${formatMoney(it.unit)} lei`;
+
+    left.appendChild(name);
+    left.appendChild(meta);
+
+    const right = document.createElement("div");
+    right.style.display = "flex";
+    right.style.alignItems = "center";
+    right.style.gap = "10px";
+
+    const price = document.createElement("div");
+    price.style.fontSize = "13px";
+    price.style.fontWeight = "900";
+    price.textContent = `${formatMoney(it.lineTotal)} lei`;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.setAttribute("data-remove-id", it.productId);
+    remove.style.border = "1px solid rgba(255,255,255,0.18)";
+    remove.style.background = "transparent";
+    remove.style.color = "inherit";
+    remove.style.borderRadius = "10px";
+    remove.style.padding = "6px 10px";
+    remove.style.cursor = "pointer";
+    remove.style.fontWeight = "900";
+    remove.textContent = "Șterge";
+
+    right.appendChild(price);
+    right.appendChild(remove);
+
+    row.appendChild(left);
+    row.appendChild(right);
+
+    drawer.appendChild(row);
+  });
+
+  const total = computeCartTotalUsingFinalPrices();
+  totalEl.textContent = `${formatMoney(total)} lei`;
+}
+
+function updateStickyCartBarVisibilityAndData() {
+  const bar = ensureStickyCartBar();
+
+  if (!_lastRenderOpts.showPrices) {
+    bar.style.display = "none";
+    return;
+  }
+
+  bar.style.display = "flex";
+
+  const count = getItemCount();
+  const total = computeCartTotalUsingFinalPrices();
+
+  const meta = bar.querySelector("#stickyCartMeta");
+  const tot = bar.querySelector("#stickyCartTotal");
+  const btn = bar.querySelector("#btnSubmitOrder");
+
+  meta.textContent = `${count} ${count === 1 ? "produs" : "produse"}`;
+  tot.textContent = `${formatMoney(total)} lei`;
+
+  btn.disabled = count <= 0;
+  btn.style.opacity = count <= 0 ? "0.55" : "1";
+  btn.style.cursor = count <= 0 ? "not-allowed" : "pointer";
+
+  // If summary is open, refresh it live
+  const wrap = bar.querySelector("#cartSummaryWrap");
+  if (wrap && wrap.style.display !== "none") {
+    renderCartSummaryIntoBar(bar);
+  }
+}
+
+/* =========================
+   Cart bindings (delegation)
+========================= */
+
+function ensureCartBindings(productsGrid) {
+  if (!productsGrid) return;
+  if (productsGrid.dataset.cartBound === "1") return;
+  productsGrid.dataset.cartBound = "1";
+
+  productsGrid.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-action]");
+    if (!btn) return;
+
+    const card = btn.closest(".product-card");
+    const productId = card?.dataset?.productId;
+    if (!productId) return;
+
+    const action = btn.dataset.action;
+    if (action === "dec") increment(productId, -1);
+    else if (action === "inc") increment(productId, +1);
+    else if (action === "add") increment(productId, +1);
+
+    syncVisibleQty(productsGrid, productId);
+    updateStickyCartBarVisibilityAndData();
+  });
+
+  productsGrid.addEventListener("change", (e) => {
+    const input = e.target?.closest?.('input[data-role="qty"]');
+    if (!input) return;
+
+    const card = input.closest(".product-card");
+    const productId = card?.dataset?.productId;
+    if (!productId) return;
+
+    const v = Math.max(0, Number(input.value || 0));
+    setQuantity(productId, v);
+
+    syncVisibleQty(productsGrid, productId);
+    updateStickyCartBarVisibilityAndData();
+  });
+
+  window.addEventListener("cart:updated", () => {
+    syncAllVisibleQty(productsGrid);
+    updateStickyCartBarVisibilityAndData();
+  });
+}
+
+function syncVisibleQty(productsGrid, productId) {
+  const card = productsGrid?.querySelector?.(
+    `.product-card[data-product-id="${CSS.escape(productId)}"]`
+  );
+  if (!card) return;
+
+  const input = card.querySelector('input[data-role="qty"]');
+  if (!input) return;
+
+  input.value = String(getQtyFromCart(productId));
+}
+
+function syncAllVisibleQty(productsGrid) {
+  if (!productsGrid) return;
+
+  const cards = productsGrid.querySelectorAll(".product-card[data-product-id]");
+  cards.forEach((card) => {
+    const productId = card.dataset.productId;
+    const input = card.querySelector('input[data-role="qty"]');
+    if (!input) return;
+    input.value = String(getQtyFromCart(productId));
+  });
+}
+
+/* =========================
+   Public API
+========================= */
+
+export async function loadProducts(db) {
+  const snap = await getDocs(
+    query(
+      collection(db, "products"),
+      where("active", "==", true),
+      orderBy("sortOrder"),
+      orderBy("name"),
+      limit(2000)
+    )
+  );
+
+  const items = [];
+  snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+  _lastItems = items;
+  return items;
+}
+
+export async function renderProducts(productsGrid, items, opts = {}) {
+  _lastItems = Array.isArray(items) ? items : [];
+  _lastRenderOpts = {
+    showPrices: !!opts.showPrices,
+    db: opts.db || null,
+    priceRules: opts.priceRules || null
+  };
+
+  ensureGridLayout(productsGrid);
+  ensureCartBindings(productsGrid);
+
+  const screenHint = document.getElementById("catalogHint");
+  if (screenHint) {
+    screenHint.textContent = _lastRenderOpts.showPrices
+      ? "Cont activ. Prețurile sunt vizibile."
+      : "Ești în așteptare (pending). Vezi catalog fără prețuri.";
+  }
+
+  // Keep base map too (useful elsewhere)
+  window.__PRODUCTS_BY_ID__ = window.__PRODUCTS_BY_ID__ || {};
+  _lastItems.forEach((p) => (window.__PRODUCTS_BY_ID__[p.id] = p));
+
+  // Categories UI
+  try {
+    const db = _lastRenderOpts.db || window.__db || null;
+    const categories = db ? await loadCategories(db) : [];
+    const presentCategoryIds = uniq(
+      _lastItems.map((p) => String(p.categoryId || "")).filter(Boolean)
+    );
+    if (categories.length) renderCategoriesUI(productsGrid, categories, presentCategoryIds);
+  } catch (e) {
+    console.warn("Categories load failed:", e);
+  }
+
+  const filtered =
+    _selectedCategoryId === "ALL"
+      ? _lastItems
+      : _lastItems.filter((p) => String(p.categoryId || "") === _selectedCategoryId);
+
+  if (!productsGrid) return;
+  productsGrid.innerHTML = "";
+
+  if (!filtered.length) {
+    const empty = document.createElement("div");
+    empty.style.opacity = "0.8";
+    empty.textContent = "Nu există produse în această categorie.";
+    productsGrid.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach((p) => {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = productCardHTML(p, _lastRenderOpts.showPrices, _lastRenderOpts.priceRules);
+    productsGrid.appendChild(wrap.firstElementChild);
+  });
+
+  if (_lastRenderOpts.showPrices) {
+    syncAllVisibleQty(productsGrid);
+    updateStickyCartBarVisibilityAndData();
+  } else {
+    const bar = document.getElementById("stickyCartBar");
+    if (bar) bar.style.display = "none";
+  }
+}
