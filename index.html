@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Comenzi Gosbi</title>
   <link rel="stylesheet" href="./styles.css" />
+
+  <!-- Dev hint: în Chrome devtools poți testa fără SW cu ?nosw=1 -->
 </head>
 
 <body>
@@ -20,14 +22,14 @@
     </div>
 
     <div class="actions">
-  <!-- Admin clienți -->
-  <button id="btnAdmin" class="btn ghost" style="display:none;">Admin</button>
+      <!-- Admin clienți -->
+      <button id="btnAdmin" class="btn ghost" style="display:none;">Admin</button>
 
-  <!-- Admin comenzi -->
-  <button id="btnOrdersAdmin" class="btn ghost" style="display:none;">Comenzi</button>
+      <!-- Admin comenzi -->
+      <button id="btnOrdersAdmin" class="btn ghost" style="display:none;">Comenzi</button>
 
-  <button id="btnLogout" class="btn ghost" hidden>Logout</button>
-</div>
+      <button id="btnLogout" class="btn ghost" hidden>Logout</button>
+    </div>
   </header>
 
   <!-- MAIN -->
@@ -42,7 +44,7 @@
     <!-- LOGIN -->
     <section id="screenLogin" class="card" hidden>
       <h2>Autentificare</h2>
-      <p class="muted">Login cu telefon + parolă </p>
+      <p class="muted">Login cu telefon + parolă</p>
 
       <div class="grid">
         <label class="field">
@@ -142,18 +144,85 @@
     <span class="muted">v1 • Firebase Spark • GitHub Pages</span>
   </footer>
 
- <script type="module" src="./js/app.js?v=40"></script>
+  <!-- IMPORTANT:
+       - bump APP_VER când vrei să fii sigur că browserul ia JS nou
+       - ex: APP_VER = 41, 42, 43...
+  -->
+  <script>
+    window.APP_VER = 41;
+  </script>
+  <script type="module" src="./js/app.js?v=41"></script>
 
-<script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker
-        .register("./sw.js")
-        .catch((e) => console.warn("SW register failed:", e));
-    });
-  }
-</script>
+  <!-- SERVICE WORKER CONTROL (dev/prod friendly) -->
+  <script>
+    (function () {
+      // Switch-uri rapide din URL:
+      //  - ?nosw=1  => NU folosi SW (ideal când testezi)
+      //  - ?sw=1    => forțează SW chiar dacă nu e web.app
+      const params = new URLSearchParams(location.search);
+      const forceNoSW = params.get("nosw") === "1";
+      const forceSW = params.get("sw") === "1";
+
+      // Detect:
+      const isLocalhost =
+        location.hostname === "localhost" ||
+        location.hostname === "127.0.0.1" ||
+        location.hostname.endsWith(".local");
+
+      const isFirebaseHosting =
+        location.hostname.endsWith(".web.app") ||
+        location.hostname.endsWith(".firebaseapp.com");
+
+      // Regulă:
+      // - default: SW DOAR în producție (Firebase Hosting)
+      // - dev/local: fără SW
+      const enableSW = !forceNoSW && (forceSW || (isFirebaseHosting && !isLocalhost));
+
+      if (!("serviceWorker" in navigator)) return;
+
+      // Dacă nu vrem SW: îl scoatem complet (unregister) ca să nu mai încurce.
+      if (!enableSW) {
+        navigator.serviceWorker.getRegistrations()
+          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+          .catch(() => {});
+        return;
+      }
+
+      // Dacă vrem SW: îl înregistrăm + forțăm update.
+      window.addEventListener("load", async () => {
+        try {
+          const reg = await navigator.serviceWorker.register("./sw.js");
+
+          // Forțează să caute o versiune nouă
+          if (reg && typeof reg.update === "function") {
+            reg.update().catch(() => {});
+          }
+
+          // Dacă apare un SW nou instalat, facem refresh automat ca să vezi modificările imediat
+          reg.addEventListener("updatefound", () => {
+            const nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener("statechange", () => {
+              if (nw.state === "installed" && navigator.serviceWorker.controller) {
+                // există update, reîncarcă
+                location.reload();
+              }
+            });
+          });
+
+          // Dacă se schimbă controllerul, reîncarcă o dată
+          let reloaded = false;
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (reloaded) return;
+            reloaded = true;
+            location.reload();
+          });
+        } catch (e) {
+          console.warn("SW register failed:", e);
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>
-
