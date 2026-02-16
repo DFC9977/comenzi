@@ -269,15 +269,21 @@ function ensureCartBar(productsGrid) {
     parent.appendChild(bar);
 
     const btn = bar.querySelector("#btnSubmitOrder");
-    btn.addEventListener("click", () => {
-      const items = getItemsArray();
-      const ev = new CustomEvent("submit", { detail: { items } });
 
-      // safe: dispatch on both grid and window
-      if (_lastGridEl) _lastGridEl.dispatchEvent(ev);
-      window.dispatchEvent(ev);
-    });
+btn.addEventListener("click", () => {
+  const items = getItemsArray();
+
+  if (!items.length) {
+    alert("Coș gol.");
+    return;
   }
+
+  window.dispatchEvent(
+    new CustomEvent("catalog:submitOrderRequested", {
+      detail: { items }
+    })
+  );
+});
   return bar;
 }
 
