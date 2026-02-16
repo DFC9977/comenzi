@@ -87,6 +87,7 @@ export async function saveContact(uid, payload) {
   if (!uid) throw new Error("UID lipsă.");
 
   const fullName = (payload?.fullName || "").trim();
+  const kennel = (payload?.kennel || "").trim();
   const address = (payload?.address || "").trim();
   const county = (payload?.county || "").trim();
   const city = (payload?.city || "").trim();
@@ -103,6 +104,7 @@ export async function saveContact(uid, payload) {
     {
       contact: {
         fullName,
+        kennel, // opțional: Canisă / Felisă
         address,
         county,
         city,
