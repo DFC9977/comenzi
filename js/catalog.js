@@ -197,6 +197,9 @@ function productCardHTML(p) {
   const showPrice = !!_lastRenderOpts.showPrices;
   const finalPrice = computeFinalPrice(p, showPrice, _lastRenderOpts.priceRules);
 
+  const img = Array.isArray(p?.imageUrls) && p.imageUrls.length ? String(p.imageUrls[0] || "") : "";
+  const desc = String(p?.description || "").trim();
+
   return `
     <div class="product-card" data-product-id="${id}">
       <div style="font-weight:900; font-size:16px; line-height:1.25;">${name}</div>
@@ -217,6 +220,33 @@ function productCardHTML(p) {
       ${p.producer ? `
         <div style="font-size:13px; opacity:0.7;">
           ${p.producer}
+        </div>
+      ` : ""}
+
+      ${img ? `
+        <img
+          src="${img}"
+          alt="${name}"
+          loading="lazy"
+          style="
+            width:100%;
+            height:160px;
+            object-fit:contain;
+            border-radius:12px;
+            background:rgba(255,255,255,0.04);
+            margin:8px 0 4px 0;"
+        />
+      ` : ""}
+
+      ${desc ? `
+        <div style="
+          font-size:13px;
+          opacity:0.75;
+          line-height:1.35;
+          margin:4px 0 2px 0;
+          max-height:54px;
+          overflow:hidden;">
+          ${desc}
         </div>
       ` : ""}
 
