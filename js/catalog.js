@@ -194,69 +194,53 @@ function ensureCatalogCSSOnce() {
 function productCardHTML(p) {
   const id = String(p.id || "");
   const name = String(p.name || "");
-  const showPrice = !!_lastRenderOpts.showPrices;
-  const finalPrice = computeFinalPrice(p, showPrice, _lastRenderOpts.priceRules);
+  const img = p.imageUrls?.[0] || "";
+  const desc = p.description || "";
 
-  const img = Array.isArray(p?.imageUrls) && p.imageUrls.length ? String(p.imageUrls[0] || "") : "";
-  const desc = String(p?.description || "").trim();
+  const finalPrice = computeFinalPrice(
+    p,
+    _lastRenderOpts.showPrices,
+    _lastRenderOpts.priceRules
+  );
 
   return `
     <div class="product-card" data-product-id="${id}">
-      <div style="font-weight:900; font-size:16px; line-height:1.25;">${name}</div>
 
-      ${p.gama ? `
-        <div style="
-          display:inline-block;
-          background:#1f2937;
-          color:white;
-          padding:4px 8px;
-          border-radius:8px;
-          font-size:12px;
-          margin-top:4px;">
-          ${p.gama}
-        </div>
-      ` : ""}
-
-      ${p.producer ? `
-        <div style="font-size:13px; opacity:0.7;">
-          ${p.producer}
-        </div>
-      ` : ""}
+      <div style="font-weight:900; font-size:16px;">
+        ${name}
+      </div>
 
       ${img ? `
-        <img
-          src="${img}"
-          alt="${name}"
-          loading="lazy"
-          style="
-            width:100%;
-            height:160px;
-            object-fit:contain;
-            border-radius:12px;
-            background:rgba(255,255,255,0.04);
-            margin:8px 0 4px 0;"
-        />
+        <img src="${img}"
+             style="
+               width:100%;
+               height:160px;
+               object-fit:contain;
+               margin:10px 0;
+               border-radius:12px;
+               background:#111;">
       ` : ""}
 
       ${desc ? `
         <div style="
           font-size:13px;
-          opacity:0.75;
-          line-height:1.35;
-          margin:4px 0 2px 0;
-          max-height:54px;
-          overflow:hidden;">
+          opacity:0.7;
+          margin-bottom:8px;">
           ${desc}
         </div>
       ` : ""}
 
-      <div style="opacity:0.9; font-size:14px;">
-        ${
-          showPrice
-            ? `Preț: <b>${formatMoney(finalPrice)} lei</b>`
-            : `Prețuri vizibile doar pentru clienți activi`
-        }
+      <div style="margin-bottom:10px;">
+        Preț: <b>${formatMoney(finalPrice)} lei</b>
       </div>
+
+      <div class="qty-controls">
+        <button onclick="decQty('${id}')">-</button>
+        <span id="qty-${id}">0</span>
+        <button onclick="incQty('${id}')">+</button>
+        <button onclick="addToCart('${id}')">Adaugă</button>
+      </div>
+
     </div>
   `;
 }
