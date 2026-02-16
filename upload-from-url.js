@@ -1,8 +1,10 @@
 const admin = require("firebase-admin");
 const axios = require("axios");
+const crypto = require("crypto");
 
 const serviceAccount = require("./serviceAccountKey.json");
 
+// ✅ bucket-ul tău REAL (din Firebase Storage: gs://gosbiromania.firebasestorage.app)
 const STORAGE_BUCKET = "gosbiromania.firebasestorage.app";
 
 admin.initializeApp({
@@ -25,149 +27,87 @@ function extFromContentType(ct) {
   return "jpg";
 }
 
-// scoate "/media/cache/<filter>/" din url
-function stripCachePath(url) {
-  return url.replace(/\/media\/cache\/[^/]+\//i, "/");
+function isAlreadyInOurBucket(url) {
+  if (!url) return false;
+  return (
+    url.includes(`storage.googleapis.com/${STORAGE_BUCKET}/`) ||
+    url.includes(`firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/`)
+  );
 }
 
-// încearcă să genereze URL-uri alternative plauzibile pentru vivog
-function buildCandidates(oldUrl) {
-  const list = [];
-
-  if (oldUrl && typeof oldUrl === "string") list.push(oldUrl);
-
-  // 1) vivog: /media/cache/<filter>/...  -> /media/cache/resolve/<filter>/...
-  // ex: /media/cache/product_zoom/assets/products/x.jpg
-  const m = oldUrl.match(/\/media\/cache\/([^/]+)\/(.*)$/i);
-  if (m) {
-    const filter = m[1];
-    const rest = m[2];
-    list.push(`https://www.vivog.fr/media/cache/resolve/${filter}/${rest}`);
-    list.push(`https://vivog.fr/media/cache/resolve/${filter}/${rest}`);
-  }
-
-  // 2) fără cache (direct)
-  if (oldUrl.includes("/media/cache/")) {
-    const noCache = stripCachePath(oldUrl);
-    list.push(noCache);
-    // și variantă fără www dacă e cazul
-    list.push(noCache.replace("https://www.vivog.fr", "https://vivog.fr"));
-  }
-
-  // 3) dacă există /assets/products/... păstrează domenii
-  const m2 = oldUrl.match(/\/assets\/products\/[^?#]+/i);
-  if (m2) {
-    list.push("https://www.vivog.fr" + m2[0]);
-    list.push("https://vivog.fr" + m2[0]);
-  }
-
-  // 4) elimină duplicate + goluri
-  return [...new Set(list.filter(Boolean))];
+// URL “Firebase style” (merge cu rules; în test mode merge imediat)
+function firebasePublicUrl(objectPath) {
+  return `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodeURIComponent(
+    objectPath
+  )}?alt=media`;
 }
 
-async function fetchImage(url) {
-  const res = await axios.get(url, {
+async function downloadToBuffer(url) {
+  const resp = await axios.get(url, {
     responseType: "arraybuffer",
     timeout: 30000,
-    maxRedirects: 5,
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9,fr;q=0.8,ro;q=0.7",
-      "Referer": "https://www.google.com/",
-    },
-    validateStatus: (s) => s >= 200 && s < 500, // nu arunca automat
+    validateStatus: () => true,
+    headers: { "User-Agent": "Mozilla/5.0" },
   });
 
-  const ct = (res.headers["content-type"] || "").toLowerCase();
-
-  // acceptăm doar imagine reală
-  if (res.status >= 200 && res.status < 300 && ct.startsWith("image/")) {
-    return res;
+  if (resp.status >= 200 && resp.status < 300) {
+    const ct = resp.headers?.["content-type"] || "";
+    return { buf: Buffer.from(resp.data), contentType: ct };
   }
 
-  // pentru debugging: un mic preview textual
-  let preview = "";
-  try {
-    preview = Buffer.from(res.data).toString("utf8", 0, 180).replace(/\s+/g, " ");
-  } catch {
-    preview = "";
-  }
-
-  const err = new Error(
-    `Not an image. status=${res.status} ct=${ct || "?"} url=${url} preview="${preview}"`
-  );
-  err._status = res.status;
-  err._ct = ct;
-  throw err;
+  const msg = typeof resp.data === "string" ? resp.data.slice(0, 200) : "";
+  throw new Error(`HTTP ${resp.status} ${msg}`.trim());
 }
 
 async function run() {
   const snap = await db.collection("products").get();
 
   for (const doc of snap.docs) {
-    const data = doc.data();
+    const p = doc.data();
+    const sku = String(p.sku || doc.id);
 
-    // ajustare: dacă ai alt câmp, schimbă aici
-    if (!data.imageUrls || !data.imageUrls.length) continue;
+    const currentUrl =
+      Array.isArray(p.imageUrls) && p.imageUrls.length ? String(p.imageUrls[0] || "") : "";
 
-    const oldUrl = data.imageUrls[0];
-    const sku = data.sku;
-
-    if (!sku) {
-      console.log("SKIP doc fără sku:", doc.id);
-      continue;
-    }
-    if (!oldUrl) {
-      console.log("SKIP sku fără url:", sku);
+    // ✅ dacă deja e pe bucket-ul nostru, nu refacem
+    if (isAlreadyInOurBucket(currentUrl)) {
+      console.log("SKIP already migrated:", sku);
       continue;
     }
 
-    const candidates = buildCandidates(oldUrl);
-
-    console.log("\nSKU:", sku);
-    console.log("Candidates:");
-    candidates.forEach((u) => console.log("  -", u));
-
-    let response = null;
-    let usedUrl = null;
-
-    for (const u of candidates) {
-      try {
-        console.log("Trying:", u);
-        response = await fetchImage(u);
-        usedUrl = u;
-        break;
-      } catch (e) {
-        console.log("  fail:", e.message);
-      }
-    }
-
-    if (!response) {
-      console.log("=> SKIP (niciun URL nu a returnat imagine)");
+    // dacă n-ai niciun url, sari
+    if (!currentUrl) {
+      console.log("SKIP no image url:", sku);
       continue;
     }
-
-    const ct = response.headers["content-type"] || "";
-    const ext = extFromContentType(ct);
-
-    const storagePath = `products/${sku}.${ext}`;
-    const file = bucket.file(storagePath);
 
     try {
-      await file.save(response.data, {
-        contentType: ct || "application/octet-stream",
-        public: true,
+      console.log("\nSKU:", sku);
+      console.log("Downloading from:", currentUrl);
+
+      const { buf, contentType } = await downloadToBuffer(currentUrl);
+      const ext = extFromContentType(contentType);
+
+      const objectPath = `products/${sku}.${ext}`;
+      const file = bucket.file(objectPath);
+
+      // upload
+      await file.save(buf, {
+        resumable: false,
+        metadata: {
+          contentType: contentType || (ext === "png" ? "image/png" : "image/jpeg"),
+          cacheControl: "public, max-age=31536000",
+        },
       });
 
-      const newUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+      const newUrl = firebasePublicUrl(objectPath);
 
       await doc.ref.update({ imageUrls: [newUrl] });
 
-      console.log("OK:", sku, "from", usedUrl);
+      console.log("OK:", sku);
       console.log("=>", newUrl);
-    } catch (e) {
-      console.log("UPLOAD/UPDATE ERROR:", sku, e?.message || e);
+    } catch (err) {
+      console.log("UPLOAD/UPDATE ERROR:", sku, "|", err?.message || err);
     }
   }
 
