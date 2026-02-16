@@ -144,6 +144,10 @@ function renderUserCard(uid, u, isPending) {
   div.innerHTML = `
     <b>${u.phone || "(fără phone)"} </b> <small>(${uid})</small><br>
     <small>
+      <b>${u?.contact?.fullName || "(fără nume)"}</b>${u?.contact?.kennel ? ` — ${u.contact.kennel}` : ""}
+    </small>
+    <br>
+    <small>
       status: ${u.status || "-"} |
       tip: ${u.clientType || "-"} |
       canal: ${u.channel || "-"} |
