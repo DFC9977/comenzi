@@ -29,6 +29,7 @@ let _selectedCategoryId = "ALL";
 let _lastRenderOpts = { showPrices: false, db: null, priceRules: null };
 let _lastGridEl = null;
 let _cartUpdatedBound = false;
+let _gridClickBound = false;
 
 /* =========================
    Helpers
@@ -49,6 +50,9 @@ function formatMoney(v) {
 }
 function uniq(arr) {
   return [...new Set(arr)];
+}
+function safeText(s) {
+  return String(s ?? "").trim();
 }
 
 /* =========================
@@ -151,7 +155,10 @@ async function renderCategories(productsGrid) {
   const host = ensureCategoriesHost(productsGrid);
   host.innerHTML = "";
 
-  const list = [{ id: "ALL", name: "Toate" }, ...categories.filter((c) => presentCategoryIds.includes(c.id))];
+  const list = [
+    { id: "ALL", name: "Toate" },
+    ...categories.filter((c) => presentCategoryIds.includes(c.id))
+  ];
 
   list.forEach((c) => {
     const btn = catChip(c.name, _selectedCategoryId === c.id);
@@ -183,8 +190,111 @@ function ensureCatalogCSSOnce() {
       gap: 10px;
       min-height: 140px;
     }
+    .qty-controls {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-top: 6px;
+    }
+    .qty-controls button {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.05);
+      color: inherit;
+      cursor: pointer;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .qty-controls .qty {
+      min-width: 28px;
+      text-align:center;
+      font-weight: 900;
+    }
+    .qty-controls .add {
+      margin-left:auto;
+      padding: 8px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.20);
+      background: rgba(255,255,255,0.08);
+    }
+    #cartBar {
+      position: sticky;
+      bottom: 0;
+      z-index: 50;
+      margin-top: 14px;
+      padding: 12px 12px;
+      border-top: 1px solid rgba(255,255,255,0.10);
+      background: rgba(10,12,16,0.92);
+      backdrop-filter: blur(10px);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #cartBar .left {
+      opacity: 0.9;
+      font-weight: 800;
+    }
+    #cartBar button {
+      padding: 10px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.20);
+      background: rgba(255,255,255,0.10);
+      color: inherit;
+      cursor: pointer;
+      font-weight: 900;
+    }
   `;
   document.head.appendChild(style);
+}
+
+/* =========================
+   Cart UI helpers
+========================= */
+
+function ensureCartBar(productsGrid) {
+  const screen = document.getElementById("screenCatalog") || document.body;
+
+  let bar = screen.querySelector("#cartBar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "cartBar";
+    bar.innerHTML = `
+      <div class="left">Coș: <span id="cartCount">0</span> buc</div>
+      <button id="btnSubmitOrder" type="button">Trimite comanda</button>
+    `;
+
+    const parent = productsGrid?.parentElement || screen;
+    parent.appendChild(bar);
+
+    const btn = bar.querySelector("#btnSubmitOrder");
+    btn.addEventListener("click", () => {
+      const items = getItemsArray();
+      const ev = new CustomEvent("submit", { detail: { items } });
+
+      // safe: dispatch on both grid and window
+      if (_lastGridEl) _lastGridEl.dispatchEvent(ev);
+      window.dispatchEvent(ev);
+    });
+  }
+  return bar;
+}
+
+function updateQtyBadges(productsGrid) {
+  if (!productsGrid) return;
+
+  const cards = productsGrid.querySelectorAll(".product-card[data-product-id]");
+  cards.forEach((card) => {
+    const id = card.getAttribute("data-product-id");
+    const q = asNumber(getItemCount(id));
+    const span = card.querySelector(`[data-qty-for="${id}"]`);
+    if (span) span.textContent = String(q);
+  });
+
+  const total = asNumber(getItemsArray()?.reduce((acc, it) => acc + asNumber(it.qty), 0));
+  const countEl = document.getElementById("cartCount");
+  if (countEl) countEl.textContent = String(total);
 }
 
 /* =========================
@@ -194,21 +304,34 @@ function ensureCatalogCSSOnce() {
 function productCardHTML(p) {
   const id = String(p.id || "");
   const name = String(p.name || "");
-  const img = p.imageUrls?.[0] || "";
-  const desc = (p.description || "").trim();
+  const showPrice = !!_lastRenderOpts.showPrices;
+  const finalPrice = computeFinalPrice(p, showPrice, _lastRenderOpts.priceRules);
 
-  const finalPrice = computeFinalPrice(
-    p,
-    _lastRenderOpts.showPrices,
-    _lastRenderOpts.priceRules
-  );
+  const img = Array.isArray(p?.imageUrls) && p.imageUrls.length ? String(p.imageUrls[0] || "") : "";
+  const desc = safeText(p?.description);
 
   return `
     <div class="product-card" data-product-id="${id}">
+      <div style="font-weight:900; font-size:16px; line-height:1.25;">${name}</div>
 
-      <div style="font-weight:900; font-size:16px; line-height:1.25;">
-        ${name}
-      </div>
+      ${p.gama ? `
+        <div style="
+          display:inline-block;
+          background:#1f2937;
+          color:white;
+          padding:4px 8px;
+          border-radius:8px;
+          font-size:12px;
+          margin-top:4px;">
+          ${p.gama}
+        </div>
+      ` : ""}
+
+      ${p.producer ? `
+        <div style="font-size:13px; opacity:0.7;">
+          ${p.producer}
+        </div>
+      ` : ""}
 
       ${img ? `
         <img
@@ -217,12 +340,11 @@ function productCardHTML(p) {
           loading="lazy"
           style="
             width:100%;
-            height:180px;
+            height:160px;
             object-fit:contain;
-            margin:10px 0 6px 0;
-            border-radius:14px;
-            background:rgba(255,255,255,0.06);
-            padding:10px;"
+            border-radius:12px;
+            background:rgba(255,255,255,0.04);
+            margin:8px 0 4px 0;"
         />
       ` : ""}
 
@@ -231,26 +353,69 @@ function productCardHTML(p) {
           font-size:13px;
           opacity:0.75;
           line-height:1.35;
-          margin:4px 0 10px 0;
+          margin:4px 0 2px 0;
           max-height:54px;
           overflow:hidden;">
           ${desc}
         </div>
       ` : ""}
 
-      <div style="margin-bottom:10px;">
-        Preț: <b>${formatMoney(finalPrice)} lei</b>
+      <div style="opacity:0.9; font-size:14px;">
+        ${
+          showPrice
+            ? `Preț: <b>${formatMoney(finalPrice)} lei</b>`
+            : `Prețuri vizibile doar pentru clienți activi`
+        }
       </div>
 
-      <div class="qty-controls" style="display:flex; gap:8px; align-items:center;">
-        <button onclick="decQty('${id}')" style="min-width:34px;">-</button>
-        <span id="qty-${id}" style="min-width:22px; text-align:center;">0</span>
-        <button onclick="incQty('${id}')" style="min-width:34px;">+</button>
-        <button onclick="addToCart('${id}')" style="padding:6px 10px;">Adaugă</button>
+      <div class="qty-controls">
+        <button type="button" data-action="dec" data-id="${id}">-</button>
+        <span class="qty" data-qty-for="${id}">0</span>
+        <button type="button" data-action="inc" data-id="${id}">+</button>
+        <button class="add" type="button" data-action="add" data-id="${id}">Adaugă</button>
       </div>
-
     </div>
   `;
+}
+
+/* =========================
+   Events
+========================= */
+
+function bindGridClickOnce(productsGrid) {
+  if (_gridClickBound || !productsGrid) return;
+  _gridClickBound = true;
+
+  productsGrid.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action][data-id]");
+    if (!btn) return;
+
+    const action = btn.getAttribute("data-action");
+    const id = btn.getAttribute("data-id");
+    if (!id) return;
+
+    const current = asNumber(getItemCount(id));
+
+    if (action === "inc") increment(id, +1);
+    else if (action === "dec") increment(id, -1);
+    else if (action === "add") {
+      // “Adaugă” = dacă e 0, pune 1; altfel +1
+      if (current <= 0) setQuantity(id, 1);
+      else increment(id, +1);
+    }
+
+    updateQtyBadges(productsGrid);
+  });
+}
+
+function bindCartUpdatedOnce(productsGrid) {
+  if (_cartUpdatedBound) return;
+  _cartUpdatedBound = true;
+
+  // dacă cart.js emite ceva gen window.dispatchEvent(new Event("cartUpdated"))
+  window.addEventListener("cartUpdated", () => {
+    updateQtyBadges(productsGrid);
+  });
 }
 
 /* =========================
@@ -285,8 +450,18 @@ export async function renderProducts(productsGrid, items, opts = {}) {
   };
 
   ensureCatalogCSSOnce();
+  ensureCartBar(productsGrid);
+  bindGridClickOnce(productsGrid);
+  bindCartUpdatedOnce(productsGrid);
 
-  const filtered = _lastItems;
+  // categories
+  await renderCategories(productsGrid);
+
+  // filter by category
+  let filtered = _lastItems;
+  if (_selectedCategoryId && _selectedCategoryId !== "ALL") {
+    filtered = filtered.filter((p) => String(p.categoryId || "") === _selectedCategoryId);
+  }
 
   if (!productsGrid) return;
   productsGrid.innerHTML = "";
@@ -296,4 +471,7 @@ export async function renderProducts(productsGrid, items, opts = {}) {
     wrap.innerHTML = productCardHTML(p);
     productsGrid.appendChild(wrap.firstElementChild);
   });
+
+  // sync quantities after render
+  updateQtyBadges(productsGrid);
 }
