@@ -77,6 +77,7 @@ const btnRegister = document.getElementById("btnRegister");
 const loginMsg = document.getElementById("loginMsg");
 
 const fullName = document.getElementById("fullName");
+const kennel = document.getElementById("kennel");
 const address = document.getElementById("address");
 const countySelect = document.getElementById("countySelect");
 const cityInput = document.getElementById("cityInput");
@@ -252,6 +253,7 @@ btnSaveContact?.addEventListener("click", async () => {
 
     await saveContact(user.uid, {
       fullName: fullName.value,
+      kennel: kennel?.value || "",
       address: address.value,
       county: countySelect.value,
       city: cityInput.value,
@@ -335,6 +337,7 @@ async function routeAfterAuth(user) {
 
   if (!isContactComplete(profile)) {
     fullName.value = profile?.contact?.fullName || "";
+    if (kennel) kennel.value = profile?.contact?.kennel || "";
     address.value = profile?.contact?.address || "";
 
     const county = profile?.contact?.county || "";
