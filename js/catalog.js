@@ -1,7 +1,7 @@
 // js/catalog.js
-// Catalog (mobile-first) + categories + cart controls + sticky cart bar + summary
-// ✅ always dispatches submit event with detail.items
+// Catalog UI + categories + product cards (image/desc) + qty controls + checkout bar
 // Exports: loadProducts(db), renderProducts(productsGrid, items, opts)
+// ✅ "Trimite comanda" dispatches: catalog:submitOrderRequested with detail.items (array)
 
 import {
   collection,
@@ -9,32 +9,31 @@ import {
   query,
   where,
   orderBy,
-  limit
+  limit,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 import {
   increment,
   setQuantity,
+  getQty,
   getItemCount,
-  getItemsArray
+  getItemsArray,
 } from "./cart.js";
 
 /* =========================
    State
 ========================= */
-
 let _categoriesCache = null;
 let _lastItems = [];
 let _selectedCategoryId = "ALL";
 let _lastRenderOpts = { showPrices: false, db: null, priceRules: null };
 let _lastGridEl = null;
-let _cartUpdatedBound = false;
-let _gridClickBound = false;
+let _boundGridHandlers = false;
+let _boundCartUpdated = false;
 
 /* =========================
    Helpers
 ========================= */
-
 function asNumber(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -45,31 +44,33 @@ function round2(n) {
 function formatMoney(v) {
   return round2(v).toLocaleString("ro-RO", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   });
 }
 function uniq(arr) {
   return [...new Set(arr)];
 }
-function safeText(s) {
-  return String(s ?? "").trim();
+function escHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 /* =========================
    Pricing
 ========================= */
-
 function getBaseGrossPrice(p) {
   return asNumber(p?.priceGross ?? p?.basePrice ?? p?.base_price ?? p?.price ?? 0);
 }
-
 function getMarkupForProduct(p, priceRules) {
   const catId = String(p?.categoryId || "");
   const byCat = priceRules?.categories?.[catId];
   if (byCat !== undefined && byCat !== null && byCat !== "") return asNumber(byCat);
   return asNumber(priceRules?.globalMarkup ?? 0);
 }
-
 function computeFinalPrice(p, showPrice, priceRules) {
   if (!showPrice) return null;
   const base = getBaseGrossPrice(p);
@@ -80,7 +81,6 @@ function computeFinalPrice(p, showPrice, priceRules) {
 /* =========================
    Categories
 ========================= */
-
 async function loadCategories(db) {
   if (_categoriesCache) return _categoriesCache;
 
@@ -100,7 +100,7 @@ async function loadCategories(db) {
       id: d.id,
       name: String(data.name || d.id),
       sortOrder: asNumber(data.sortOrder),
-      active: data.active !== false
+      active: data.active !== false,
     });
   });
 
@@ -157,7 +157,7 @@ async function renderCategories(productsGrid) {
 
   const list = [
     { id: "ALL", name: "Toate" },
-    ...categories.filter((c) => presentCategoryIds.includes(c.id))
+    ...categories.filter((c) => presentCategoryIds.includes(c.id)),
   ];
 
   list.forEach((c) => {
@@ -173,7 +173,6 @@ async function renderCategories(productsGrid) {
 /* =========================
    CSS
 ========================= */
-
 function ensureCatalogCSSOnce() {
   if (document.getElementById("catalogCss")) return;
 
@@ -190,135 +189,74 @@ function ensureCatalogCSSOnce() {
       gap: 10px;
       min-height: 140px;
     }
-    .qty-controls {
+
+    .product-card .qty-controls{
       display:flex;
+      gap:8px;
       align-items:center;
-      gap:10px;
-      margin-top: 6px;
+      margin-top:6px;
     }
-    .qty-controls button {
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.16);
+    .product-card .qty-controls button{
+      border:1px solid rgba(255,255,255,0.20);
       background: rgba(255,255,255,0.05);
       color: inherit;
-      cursor: pointer;
-      font-weight: 900;
-      line-height: 1;
-    }
-    .qty-controls .qty {
-      min-width: 28px;
-      text-align:center;
-      font-weight: 900;
-    }
-    .qty-controls .add {
-      margin-left:auto;
-      padding: 8px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.20);
-      background: rgba(255,255,255,0.08);
-    }
-    #cartBar {
-      position: sticky;
-      bottom: 0;
-      z-index: 50;
-      margin-top: 14px;
-      padding: 12px 12px;
-      border-top: 1px solid rgba(255,255,255,0.10);
-      background: rgba(10,12,16,0.92);
-      backdrop-filter: blur(10px);
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      justify-content: space-between;
-    }
-    #cartBar .left {
-      opacity: 0.9;
+      border-radius: 10px;
+      padding: 8px 10px;
       font-weight: 800;
-    }
-    #cartBar button {
-      padding: 10px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(255,255,255,0.20);
-      background: rgba(255,255,255,0.10);
-      color: inherit;
       cursor: pointer;
+    }
+    .product-card .qty-controls .qty{
+      min-width: 34px;
+      text-align:center;
+      font-weight:900;
+    }
+
+    #catalogCartBar{
+      position: sticky;
+      bottom: 12px;
+      margin-top: 14px;
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+    }
+    #catalogCartBar button{
+      border:1px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.08);
+      color: inherit;
+      border-radius: 12px;
+      padding: 10px 12px;
       font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
     }
   `;
   document.head.appendChild(style);
 }
 
 /* =========================
-   Cart UI helpers
-========================= */
-
-function ensureCartBar(productsGrid) {
-  const screen = document.getElementById("screenCatalog") || document.body;
-
-  let bar = screen.querySelector("#cartBar");
-  if (!bar) {
-    bar = document.createElement("div");
-    bar.id = "cartBar";
-    bar.innerHTML = `
-      <div class="left">Coș: <span id="cartCount">0</span> buc</div>
-      <button id="btnSubmitOrder" type="button">Trimite comanda</button>
-    `;
-
-    const parent = productsGrid?.parentElement || screen;
-    parent.appendChild(bar);
-
-    const btn = bar.querySelector("#btnSubmitOrder");
-
-btn.addEventListener("click", () => {
-  const items = getItemsArray();
-
-  if (!items.length) {
-    alert("Coș gol.");
-    return;
-  }
-
-  window.dispatchEvent(
-    new CustomEvent("catalog:submitOrderRequested", {
-      detail: { items }
-    })
-  );
-});
-  return bar;
-}
-
-function updateQtyBadges(productsGrid) {
-  if (!productsGrid) return;
-
-  const cards = productsGrid.querySelectorAll(".product-card[data-product-id]");
-  cards.forEach((card) => {
-    const id = card.getAttribute("data-product-id");
-    const q = asNumber(getItemCount(id));
-    const span = card.querySelector(`[data-qty-for="${id}"]`);
-    if (span) span.textContent = String(q);
-  });
-
-  const total = asNumber(getItemsArray()?.reduce((acc, it) => acc + asNumber(it.qty), 0));
-  const countEl = document.getElementById("cartCount");
-  if (countEl) countEl.textContent = String(total);
-}
-
-/* =========================
    Product Card HTML
 ========================= */
-
 function productCardHTML(p) {
   const id = String(p.id || "");
-  const name = String(p.name || "");
+  const name = escHtml(p.name || "");
+  const img = String(p.imageUrls?.[0] || "");
+  const desc = escHtml(p.description || "");
   const showPrice = !!_lastRenderOpts.showPrices;
   const finalPrice = computeFinalPrice(p, showPrice, _lastRenderOpts.priceRules);
-
-  const img = Array.isArray(p?.imageUrls) && p.imageUrls.length ? String(p.imageUrls[0] || "") : "";
-  const desc = safeText(p?.description);
+  const qty = getQty(id);
 
   return `
-    <div class="product-card" data-product-id="${id}">
-      <div style="font-weight:900; font-size:16px; line-height:1.25;">${name}</div>
+    <div class="product-card" data-product-id="${escHtml(id)}">
+
+      <div style="font-weight:900; font-size:16px; line-height:1.25;">
+        ${name}
+      </div>
 
       ${p.gama ? `
         <div style="
@@ -328,45 +266,37 @@ function productCardHTML(p) {
           padding:4px 8px;
           border-radius:8px;
           font-size:12px;
-          margin-top:4px;">
-          ${p.gama}
+          margin-top:4px;
+          width:fit-content;">
+          ${escHtml(p.gama)}
         </div>
       ` : ""}
 
       ${p.producer ? `
         <div style="font-size:13px; opacity:0.7;">
-          ${p.producer}
+          ${escHtml(p.producer)}
         </div>
       ` : ""}
 
       ${img ? `
-        <img
-          src="${img}"
-          alt="${name}"
-          loading="lazy"
-          style="
-            width:100%;
-            height:160px;
-            object-fit:contain;
-            border-radius:12px;
-            background:rgba(255,255,255,0.04);
-            margin:8px 0 4px 0;"
-        />
+        <img src="${escHtml(img)}"
+             alt=""
+             style="
+               width:100%;
+               height:160px;
+               object-fit:contain;
+               margin:6px 0 2px 0;
+               border-radius:12px;
+               background:#111;">
       ` : ""}
 
       ${desc ? `
-        <div style="
-          font-size:13px;
-          opacity:0.75;
-          line-height:1.35;
-          margin:4px 0 2px 0;
-          max-height:54px;
-          overflow:hidden;">
+        <div style="font-size:13px; opacity:0.7;">
           ${desc}
         </div>
       ` : ""}
 
-      <div style="opacity:0.9; font-size:14px;">
+      <div style="opacity:0.95; font-size:14px;">
         ${
           showPrice
             ? `Preț: <b>${formatMoney(finalPrice)} lei</b>`
@@ -375,59 +305,107 @@ function productCardHTML(p) {
       </div>
 
       <div class="qty-controls">
-        <button type="button" data-action="dec" data-id="${id}">-</button>
-        <span class="qty" data-qty-for="${id}">0</span>
-        <button type="button" data-action="inc" data-id="${id}">+</button>
-        <button class="add" type="button" data-action="add" data-id="${id}">Adaugă</button>
+        <button type="button" data-action="dec" data-id="${escHtml(id)}">-</button>
+        <span class="qty" id="qty-${escHtml(id)}">${qty}</span>
+        <button type="button" data-action="inc" data-id="${escHtml(id)}">+</button>
+        <button type="button" data-action="add" data-id="${escHtml(id)}">Adaugă</button>
       </div>
+
     </div>
   `;
 }
 
 /* =========================
-   Events
+   Cart bar
 ========================= */
+function ensureCartBar(productsGrid) {
+  const screen = document.getElementById("screenCatalog") || document.body;
+  const parent = productsGrid?.parentElement || screen;
 
-function bindGridClickOnce(productsGrid) {
-  if (_gridClickBound || !productsGrid) return;
-  _gridClickBound = true;
+  let bar = parent.querySelector("#catalogCartBar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "catalogCartBar";
+    bar.innerHTML = `
+      <div style="font-weight:900;">
+        Coș: <span id="catalogCartCount">0</span> buc
+      </div>
+      <button id="btnSubmitOrder" type="button">Trimite comanda</button>
+    `;
+    parent.appendChild(bar);
+
+    bar.querySelector("#btnSubmitOrder").addEventListener("click", () => {
+      const items = getItemsArray();
+      if (!items.length) {
+        alert("Coșul este gol.");
+        return;
+      }
+      window.dispatchEvent(
+        new CustomEvent("catalog:submitOrderRequested", { detail: { items } })
+      );
+    });
+  }
+  updateCartBar();
+}
+
+function updateCartBar() {
+  const el = document.getElementById("catalogCartCount");
+  if (el) el.textContent = String(getItemCount());
+}
+
+/* =========================
+   Event binding (once)
+========================= */
+function bindGridHandlersOnce(productsGrid) {
+  if (_boundGridHandlers) return;
+  if (!productsGrid) return;
 
   productsGrid.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-action][data-id]");
+    const btn = e.target?.closest?.("button[data-action]");
     if (!btn) return;
 
     const action = btn.getAttribute("data-action");
     const id = btn.getAttribute("data-id");
     if (!id) return;
 
-    const current = asNumber(getItemCount(id));
-
-    if (action === "inc") increment(id, +1);
-    else if (action === "dec") increment(id, -1);
-    else if (action === "add") {
-      // “Adaugă” = dacă e 0, pune 1; altfel +1
-      if (current <= 0) setQuantity(id, 1);
-      else increment(id, +1);
+    if (action === "inc") {
+      increment(id, 1);
+    } else if (action === "dec") {
+      increment(id, -1);
+    } else if (action === "add") {
+      increment(id, 1);
     }
 
-    updateQtyBadges(productsGrid);
+    // UI update is triggered by cart:updated as well, but keep it snappy
+    const qtyEl = document.getElementById(`qty-${id}`);
+    if (qtyEl) qtyEl.textContent = String(getQty(id));
+    updateCartBar();
   });
+
+  _boundGridHandlers = true;
 }
 
 function bindCartUpdatedOnce(productsGrid) {
-  if (_cartUpdatedBound) return;
-  _cartUpdatedBound = true;
+  if (_boundCartUpdated) return;
 
-  // dacă cart.js emite ceva gen window.dispatchEvent(new Event("cartUpdated"))
-  window.addEventListener("cartUpdated", () => {
-    updateQtyBadges(productsGrid);
+  window.addEventListener("cart:updated", () => {
+    // update all qty labels currently rendered
+    if (productsGrid) {
+      productsGrid.querySelectorAll("[data-product-id]").forEach((card) => {
+        const id = card.getAttribute("data-product-id");
+        const qtyEl = id ? document.getElementById(`qty-${id}`) : null;
+        if (qtyEl) qtyEl.textContent = String(getQty(id));
+      });
+    }
+    updateCartBar();
   });
+
+  _boundCartUpdated = true;
 }
 
 /* =========================
    Public API
 ========================= */
-
 export async function loadProducts(db) {
   const snap = await getDocs(
     query(
@@ -440,44 +418,36 @@ export async function loadProducts(db) {
   );
 
   const items = [];
-  snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
-  _lastItems = items;
+  snap.forEach((d) => {
+    items.push({ id: d.id, ...((d.data && d.data()) || {}) });
+  });
   return items;
 }
 
-export async function renderProducts(productsGrid, items, opts = {}) {
-  _lastGridEl = productsGrid;
-
-  _lastItems = Array.isArray(items) ? items : [];
-  _lastRenderOpts = {
-    showPrices: !!opts.showPrices,
-    db: opts.db || null,
-    priceRules: opts.priceRules || null
-  };
+export function renderProducts(productsGrid, items, opts = {}) {
+  if (!productsGrid) return;
 
   ensureCatalogCSSOnce();
-  ensureCartBar(productsGrid);
-  bindGridClickOnce(productsGrid);
+
+  _lastGridEl = productsGrid;
+  _lastItems = Array.isArray(items) ? items : [];
+  _lastRenderOpts = { ..._lastRenderOpts, ...opts };
+
+  bindGridHandlersOnce(productsGrid);
   bindCartUpdatedOnce(productsGrid);
 
-  // categories
-  await renderCategories(productsGrid);
-
   // filter by category
-  let filtered = _lastItems;
+  let view = _lastItems;
   if (_selectedCategoryId && _selectedCategoryId !== "ALL") {
-    filtered = filtered.filter((p) => String(p.categoryId || "") === _selectedCategoryId);
+    view = view.filter((p) => String(p.categoryId || "") === _selectedCategoryId);
   }
 
-  if (!productsGrid) return;
-  productsGrid.innerHTML = "";
+  // render categories (async, non-blocking)
+  renderCategories(productsGrid).catch(() => {});
 
-  filtered.forEach((p) => {
-    const wrap = document.createElement("div");
-    wrap.innerHTML = productCardHTML(p);
-    productsGrid.appendChild(wrap.firstElementChild);
-  });
+  // render cards
+  productsGrid.innerHTML = view.map(productCardHTML).join("");
 
-  // sync quantities after render
-  updateQtyBadges(productsGrid);
+  // ensure cart bar + count
+  ensureCartBar(productsGrid);
 }
