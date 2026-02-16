@@ -195,7 +195,7 @@ function productCardHTML(p) {
   const id = String(p.id || "");
   const name = String(p.name || "");
   const img = p.imageUrls?.[0] || "";
-  const desc = p.description || "";
+  const desc = (p.description || "").trim();
 
   const finalPrice = computeFinalPrice(
     p,
@@ -206,26 +206,34 @@ function productCardHTML(p) {
   return `
     <div class="product-card" data-product-id="${id}">
 
-      <div style="font-weight:900; font-size:16px;">
+      <div style="font-weight:900; font-size:16px; line-height:1.25;">
         ${name}
       </div>
 
       ${img ? `
-        <img src="${img}"
-             style="
-               width:100%;
-               height:160px;
-               object-fit:contain;
-               margin:10px 0;
-               border-radius:12px;
-               background:#111;">
+        <img
+          src="${img}"
+          alt="${name}"
+          loading="lazy"
+          style="
+            width:100%;
+            height:180px;
+            object-fit:contain;
+            margin:10px 0 6px 0;
+            border-radius:14px;
+            background:rgba(255,255,255,0.06);
+            padding:10px;"
+        />
       ` : ""}
 
       ${desc ? `
         <div style="
           font-size:13px;
-          opacity:0.7;
-          margin-bottom:8px;">
+          opacity:0.75;
+          line-height:1.35;
+          margin:4px 0 10px 0;
+          max-height:54px;
+          overflow:hidden;">
           ${desc}
         </div>
       ` : ""}
@@ -234,11 +242,11 @@ function productCardHTML(p) {
         Preț: <b>${formatMoney(finalPrice)} lei</b>
       </div>
 
-      <div class="qty-controls">
-        <button onclick="decQty('${id}')">-</button>
-        <span id="qty-${id}">0</span>
-        <button onclick="incQty('${id}')">+</button>
-        <button onclick="addToCart('${id}')">Adaugă</button>
+      <div class="qty-controls" style="display:flex; gap:8px; align-items:center;">
+        <button onclick="decQty('${id}')" style="min-width:34px;">-</button>
+        <span id="qty-${id}" style="min-width:22px; text-align:center;">0</span>
+        <button onclick="incQty('${id}')" style="min-width:34px;">+</button>
+        <button onclick="addToCart('${id}')" style="padding:6px 10px;">Adaugă</button>
       </div>
 
     </div>
