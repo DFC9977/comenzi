@@ -1,15 +1,11 @@
 import { auth, db } from "./firebase.js";
+import { exportOrderPDFA4_PRO } from "./pdf-export.js";
 
 import {
   collection,
   query,
   orderBy,
-  onSnapshot,
-  doc,
-  updateDoc,
-  serverTimestamp,
-  Timestamp,
-  arrayUnion
+  onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const listEl = document.getElementById("ordersList");
@@ -18,6 +14,7 @@ const refreshBtn = document.getElementById("refreshBtn");
 
 let ordersData = [];
 
+// ===== Helpers =====
 function formatMoney(v) {
   return Number(v || 0).toLocaleString("ro-RO");
 }
@@ -27,10 +24,11 @@ function formatDate(ts) {
   return ts.toDate().toLocaleString("ro-RO");
 }
 
+// ===== Render =====
 function render() {
   const filter = filterEl.value;
 
-  const items = ordersData.filter(o =>
+  const items = ordersData.filter((o) =>
     filter === "ALL" ? true : o.status === filter
   );
 
@@ -41,97 +39,44 @@ function render() {
     return;
   }
 
-  items.forEach(order => {
+  items.forEach((order) => {
     const card = document.createElement("div");
     card.className = "order-card";
 
-    const header = document.createElement("div");
-    header.className = "order-header";
-
-    header.innerHTML = `
-      <div>
-        <strong>#${order.orderNumber}</strong><br>
-        ${order.clientName || order.clientId}<br>
-        ${formatDate(order.createdAt)}
-      </div>
-
-      <div>
-        Total: <strong>${formatMoney(order.total)} lei</strong>
-      </div>
+    card.innerHTML = `
+      <div><b>Comanda #${order.orderNumber || "-"}</b></div>
+      <div>Status: ${order.status || "-"}</div>
+      <div>Data: ${formatDate(order.createdAt)}</div>
+      <div>Total: ${formatMoney(order.total)} RON</div>
+      <br>
+      <button class="exportBtn">Export PDF</button>
     `;
 
-    const controls = document.createElement("div");
-
-    const select = document.createElement("select");
-    ["NEW","CONFIRMED","SENT","DELIVERED","CANCELED"].forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s;
-      opt.textContent = s;
-      if (order.status === s) opt.selected = true;
-      select.appendChild(opt);
-    });
-
-    const btn = document.createElement("button");
-    btn.textContent = "Salvează";
-
-    btn.onclick = async () => {
-      const user = auth.currentUser;
-      if (!user) return alert("Nu ești logat.");
-
-      await updateDoc(doc(db, "orders", order.id), {
-        status: select.value,
-        updatedAt: serverTimestamp(),
-        statusHistory: arrayUnion({
-          status: select.value,
-          at: Timestamp.now(),
-          adminUid: user.uid
-        })
-      });
-
-      alert("Status actualizat.");
+    card.querySelector(".exportBtn").onclick = () => {
+      exportOrderPDFA4_PRO(order, db);
     };
 
-    controls.appendChild(select);
-    controls.appendChild(btn);
-
-    header.appendChild(controls);
-
-    card.appendChild(header);
-
-    const lines = document.createElement("div");
-    lines.className = "order-lines";
-
-    order.items.forEach(line => {
-      const row = document.createElement("div");
-      row.className = "line";
-      row.innerHTML = `
-        <div>${line.name} × ${line.qty}</div>
-        <div>${formatMoney(line.lineTotal)} lei</div>
-      `;
-      lines.appendChild(row);
-    });
-
-    card.appendChild(lines);
     listEl.appendChild(card);
   });
 }
 
-function subscribe() {
-  const q = query(
-    collection(db, "orders"),
-    orderBy("createdAt", "desc")
-  );
+// ===== Firestore Listener =====
+function loadOrders() {
+  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
 
-  onSnapshot(q, snap => {
-    ordersData = [];
-    snap.forEach(d => {
-      ordersData.push({ id: d.id, ...d.data() });
-    });
+  onSnapshot(q, (snap) => {
+    ordersData = snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data()
+    }));
+
     render();
   });
 }
 
+// ===== Events =====
 filterEl.addEventListener("change", render);
 refreshBtn.addEventListener("click", render);
 
-subscribe();
+// ===== Init =====
+loadOrders();
