@@ -50,6 +50,11 @@ function escHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+function truncateText(text, maxChars) {
+  if (!text || text.length <= maxChars) return text;
+  return text.slice(0, maxChars).trim() + "...";
+}
+
 function ensureCSSOnce() {
   if (document.getElementById("catalog_css")) return;
   const style = document.createElement("style");
@@ -334,6 +339,8 @@ function productCardHTML(p) {
   const name = escHtml(p.name || "");
   const img = p.imageUrls?.[0] ? String(p.imageUrls[0]) : "";
   const desc = (p.description || "").trim();
+  const descShort = truncateText(desc, 80);
+  const hasMore = desc.length > 80;
   const gama = (p.gama || "").trim();
   const producer = (p.producer || "").trim();
 
@@ -357,11 +364,28 @@ function productCardHTML(p) {
           style="width:100%;height:160px;object-fit:contain;border-radius:12px;background:#111;margin:6px 0 0 0;">
       ` : ""}
 
-      ${desc ? `<div style="font-size:13px;opacity:.7;">${escHtml(desc)}</div>` : ""}
+      ${desc ? `
+        <div class="desc-wrapper" style="font-size:13px;opacity:.7;">
+          <div class="desc-short">${escHtml(descShort)}</div>
+          <div class="desc-full" style="display:none;">${escHtml(desc)}</div>
+          ${hasMore ? `<button type="button" class="read-more" style="color:#3b82f6;background:none;border:none;padding:0;cursor:pointer;font-size:13px;margin-top:4px;">Citește mai mult</button>` : ""}
+        </div>` : ""}
 
       <div style="font-size:14px;opacity:.95;">
         ${showPrice ? `Preț: <b>${formatMoney(finalPrice)} lei</b>` : `Prețuri vizibile doar pentru clienți activi`}
       </div>
+
+      ${showPrice ? `
+        <div class="qty-controls">
+          <button type="button" data-action="dec">-</button>
+          <span class="qty" id="qty-${escHtml(id)}">${qty}</span>
+          <button type="button" data-action="inc">+</button>
+          <button type="button" data-action="add" style="margin-left:auto;">Adaugă</button>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
 
       ${showPrice ? `
         <div class="qty-controls">
@@ -576,11 +600,31 @@ function bindGridOnce(grid) {
   _gridBound = true;
 
   grid.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-action]");
+    const btn = e.target.closest("button");
     if (!btn) return;
 
     const card = btn.closest(".product-card");
     const pid = card?.getAttribute("data-product-id");
+
+    // Read more/less toggle
+    if (btn.classList.contains("read-more")) {
+      e.preventDefault();
+      const wrapper = card.querySelector(".desc-wrapper");
+      const short = wrapper.querySelector(".desc-short");
+      const full = wrapper.querySelector(".desc-full");
+
+      if (full.style.display === "none") {
+        short.style.display = "none";
+        full.style.display = "block";
+        btn.textContent = "Citește mai puțin";
+      } else {
+        short.style.display = "block";
+        full.style.display = "none";
+        btn.textContent = "Citește mai mult";
+      }
+      return;
+    }
+
     if (!pid) return;
 
     const act = btn.getAttribute("data-action");
@@ -633,14 +677,69 @@ export async function renderProducts(productsGrid, items, opts = {}) {
     priceRules: opts.priceRules || null
   };
 
-  // render grid
   if (!productsGrid) return;
   productsGrid.id = productsGrid.id || "productsGrid";
-  productsGrid.innerHTML = _lastItems.map(productCardHTML).join("");
+
+  // Build filter options
+  const categories = [...new Set(_lastItems.map(p => p.categoryId || p.category).filter(Boolean))];
+  const producers = [...new Set(_lastItems.map(p => p.producer).filter(Boolean))];
+  const gamas = [...new Set(_lastItems.map(p => p.gama).filter(Boolean))];
+
+  // Create filter UI
+  const filtersHTML = `
+    <div id="catalogFilters" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+      <select id="filterCategory" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;">
+        <option value="">Toate categoriile</option>
+        ${categories.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join("")}
+      </select>
+
+      <select id="filterProducer" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;">
+        <option value="">Toți producătorii</option>
+        ${producers.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}
+      </select>
+
+      <select id="filterGama" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;">
+        <option value="">Toate gamele</option>
+        ${gamas.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join("")}
+      </select>
+    </div>
+  `;
+
+  // Insert filters + grid
+  const wrapper = productsGrid.parentElement;
+  if (wrapper && !document.getElementById("catalogFilters")) {
+    wrapper.insertAdjacentHTML("afterbegin", filtersHTML);
+    
+    // Bind filter change events
+    ["filterCategory", "filterProducer", "filterGama"].forEach(id => {
+      document.getElementById(id)?.addEventListener("change", () => applyFilters());
+    });
+  }
+
+  // Initial render
+  applyFilters();
 
   ensureCheckoutBar(productsGrid);
   bindGridOnce(productsGrid);
   bindCartUpdatedOnce();
 
   updateCartUI();
+}
+
+function applyFilters() {
+  const catFilter = document.getElementById("filterCategory")?.value || "";
+  const prodFilter = document.getElementById("filterProducer")?.value || "";
+  const gamaFilter = document.getElementById("filterGama")?.value || "";
+
+  const filtered = _lastItems.filter(p => {
+    if (catFilter && (p.categoryId || p.category) !== catFilter) return false;
+    if (prodFilter && p.producer !== prodFilter) return false;
+    if (gamaFilter && p.gama !== gamaFilter) return false;
+    return true;
+  });
+
+  const grid = document.getElementById("productsGrid");
+  if (grid) {
+    grid.innerHTML = filtered.map(productCardHTML).join("");
+  }
 }
