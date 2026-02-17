@@ -287,15 +287,18 @@ function ensureCSSOnce() {
   font-size:12px;
   line-height:1;
   border-radius:10px;
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.25);
+  background:rgba(255,255,255,.10);
+
+  color:#fff;          /* ← FIXUL IMPORTANT */
+  font-weight:600;
+
   cursor:pointer;
   flex:0 0 auto;
 }
 
-/* când sheet e deschis, nu vrem scroll pe fundal */
-body.cart-open{
-  overflow:hidden;
+#cartSheetBody .cart-line .actions button:hover{
+  background:rgba(255,255,255,.18);
 }
 `;
   document.head.appendChild(style);
