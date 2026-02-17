@@ -211,6 +211,92 @@ function ensureCSSOnce() {
   }
 
 }
+
+/* ===== CART BOTTOM SHEET (SLIDE UP) ===== */
+#cartOverlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  display:none;
+  z-index:9998;
+}
+
+#cartSheet{
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  transform:translateY(110%);
+  transition:transform .22s ease;
+  z-index:9999;
+
+  background:rgba(10,12,16,.92);
+  border-top:1px solid rgba(255,255,255,.12);
+  border-radius:16px 16px 0 0;
+  backdrop-filter:blur(10px);
+  padding:12px;
+}
+
+#cartSheet.open{
+  transform:translateY(0);
+}
+
+#cartSheetHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:10px;
+}
+
+#cartSheetHeader .title{
+  font-weight:900;
+  font-size:14px;
+}
+
+#cartSheetClose{
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.08);
+  color:inherit;
+  border-radius:12px;
+  padding:8px 10px;
+  font-weight:900;
+  cursor:pointer;
+  flex:0 0 auto;
+}
+
+/* conținut scrollabil */
+#cartSheetBody{
+  max-height:55vh;
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
+  padding-right:4px;
+}
+
+/* în sheet vrem butoane mai compacte */
+#cartSheetBody .cart-line .actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:nowrap;
+}
+
+#cartSheetBody .cart-line .actions button{
+  width:auto;
+  padding:6px 10px;
+  font-size:12px;
+  line-height:1;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.06);
+  cursor:pointer;
+  flex:0 0 auto;
+}
+
+/* când sheet e deschis, nu vrem scroll pe fundal */
+body.cart-open{
+  overflow:hidden;
+}
 `;
   document.head.appendChild(style);
 }
@@ -284,18 +370,15 @@ function ensureCheckoutBar(grid) {
       <span id="cartTotal" style="opacity:.75;font-weight:700;margin-left:10px;"></span>
     </div>
     <div style="flex:1;"></div>
-    <button id="btnToggleDetails" type="button">Detalii</button>
+    <button id="btnCartDetails" type="button">Detalii</button>
     <button id="btnSubmitOrder" type="button">Trimite comanda</button>
     <div id="cartDetails"></div>
   `;
 
   host.appendChild(bar);
 
-  bar.querySelector("#btnToggleDetails").addEventListener("click", () => {
-    const d = bar.querySelector("#cartDetails");
-    const open = d.style.display !== "none";
-    d.style.display = open ? "none" : "block";
-    if (!open) renderCartDetails();
+  bar.querySelector("#btnCartDetails").addEventListener("click", () => {
+    openCartSheet();
   });
 
   bar.querySelector("#btnSubmitOrder").addEventListener("click", () => {
@@ -308,6 +391,100 @@ function ensureCheckoutBar(grid) {
   });
 
   return bar;
+}
+
+function ensureCartSheetOnce() {
+  if (document.getElementById("cartSheet")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "cartOverlay";
+  overlay.addEventListener("click", closeCartSheet);
+
+  const sheet = document.createElement("div");
+  sheet.id = "cartSheet";
+  sheet.innerHTML = `
+    <div id="cartSheetHeader">
+      <div class="title">Detalii coș</div>
+      <button id="cartSheetClose" type="button">Închide</button>
+    </div>
+    <div id="cartSheetBody"></div>
+  `;
+
+  sheet.querySelector("#cartSheetClose").addEventListener("click", closeCartSheet);
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(sheet);
+}
+
+function openCartSheet() {
+  ensureCartSheetOnce();
+
+  const overlay = document.getElementById("cartOverlay");
+  const sheet = document.getElementById("cartSheet");
+  const body = document.getElementById("cartSheetBody");
+
+  if (!overlay || !sheet || !body) return;
+
+  renderCartDetailsInto(body);
+
+  overlay.style.display = "block";
+  sheet.classList.add("open");
+  document.body.classList.add("cart-open");
+}
+
+function closeCartSheet() {
+  const overlay = document.getElementById("cartOverlay");
+  const sheet = document.getElementById("cartSheet");
+  if (overlay) overlay.style.display = "none";
+  if (sheet) sheet.classList.remove("open");
+  document.body.classList.remove("cart-open");
+}
+
+function renderCartDetailsInto(containerEl) {
+  const items = buildOrderItemsForSubmit();
+  if (!items.length) {
+    containerEl.innerHTML = `<div style="opacity:.75;">Coș gol.</div>`;
+    return;
+  }
+
+  const total = round2(items.reduce((s, it) => s + asNumber(it.lineTotal), 0));
+
+  containerEl.innerHTML = `
+    ${items.map(it => `
+      <div class="cart-line" data-id="${escHtml(it.productId)}">
+        <div class="meta">
+          <div class="title">${escHtml(it.name || it.productId)}</div>
+          <div class="sub">${formatMoney(it.unitPriceFinal)} lei × ${it.qty} = <b>${formatMoney(it.lineTotal)} lei</b></div>
+        </div>
+        <div class="actions">
+          <button type="button" data-cart="dec">-</button>
+          <button type="button" data-cart="inc">+</button>
+          <button type="button" data-cart="rm">Șterge</button>
+        </div>
+      </div>
+    `).join("")}
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
+      <div style="opacity:.8;font-weight:800;">Total:</div>
+      <div style="font-weight:900;">${formatMoney(total)} lei</div>
+    </div>
+  `;
+
+  containerEl.querySelectorAll("button[data-cart]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest(".cart-line");
+      const pid = row?.getAttribute("data-id");
+      if (!pid) return;
+
+      const act = btn.getAttribute("data-cart");
+      if (act === "inc") increment(pid, 1);
+      if (act === "dec") increment(pid, -1);
+      if (act === "rm") setQuantity(pid, 0);
+
+      updateCartUI();
+      renderCartDetailsInto(containerEl);
+    });
+  });
 }
 
 function buildOrderItemsForSubmit() {
@@ -334,50 +511,9 @@ function renderCartDetails() {
   if (!bar) return;
 
   const wrap = bar.querySelector("#cartDetails");
-  const items = buildOrderItemsForSubmit();
-  if (!items.length) {
-    wrap.innerHTML = `<div style="opacity:.75;">Coș gol.</div>`;
-    return;
-  }
+  if (!wrap) return;
 
-  const total = round2(items.reduce((s, it) => s + asNumber(it.lineTotal), 0));
-
-  wrap.innerHTML = `
-    ${items.map(it => `
-      <div class="cart-line" data-id="${escHtml(it.productId)}">
-        <div class="meta">
-          <div class="title">${escHtml(it.name || it.productId)}</div>
-          <div class="sub">${formatMoney(it.unitPriceFinal)} lei × ${it.qty} = <b>${formatMoney(it.lineTotal)} lei</b></div>
-        </div>
-        <div class="actions">
-          <button type="button" data-cart="dec">-</button>
-          <button type="button" data-cart="inc">+</button>
-          <button type="button" data-cart="rm">Șterge</button>
-        </div>
-      </div>
-    `).join("")}
-
-    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
-      <div style="opacity:.8;font-weight:800;">Total:</div>
-      <div style="font-weight:900;">${formatMoney(total)} lei</div>
-    </div>
-  `;
-
-  wrap.querySelectorAll("button[data-cart]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const row = btn.closest(".cart-line");
-      const pid = row?.getAttribute("data-id");
-      if (!pid) return;
-
-      const act = btn.getAttribute("data-cart");
-      if (act === "inc") increment(pid, 1);
-      if (act === "dec") increment(pid, -1);
-      if (act === "rm") setQuantity(pid, 0);
-
-      updateCartUI();
-      renderCartDetails();
-    });
-  });
+  renderCartDetailsInto(wrap);
 }
 
 function updateCartUI() {
@@ -397,6 +533,13 @@ function updateCartUI() {
 
     const details = bar.querySelector("#cartDetails");
     if (details && details.style.display !== "none") renderCartDetails();
+  }
+
+  // if sheet is open, keep it in sync
+  const sheet = document.getElementById("cartSheet");
+  if (sheet && sheet.classList.contains("open")) {
+    const body = document.getElementById("cartSheetBody");
+    if (body) renderCartDetailsInto(body);
   }
 
   // sync quantities in visible cards
