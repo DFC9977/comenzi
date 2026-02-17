@@ -173,6 +173,42 @@ function renderChat(msgs) {
   chatBody.scrollTop = chatBody.scrollHeight;
 }
 
+async function editOrder(order) {
+  if (!confirm(`Vrei să modifici comanda #${order.orderNumber || ""}?\n\nProdusele din comandă vor fi încărcate în coș și vei putea edita cantitățile.`)) {
+    return;
+  }
+
+  try {
+    // Load cart module dynamically
+    const { clearCart, setQuantity } = await import('./js/cart.js');
+
+    // Clear current cart
+    await clearCart();
+
+    // Load order items into cart
+    for (const item of order.items || []) {
+      if (item.productId && item.qty > 0) {
+        setQuantity(item.productId, item.qty);
+      }
+    }
+
+    // Store order ID for update
+    sessionStorage.setItem('editingOrderId', order.id);
+    sessionStorage.setItem('editingOrderNumber', order.orderNumber || '');
+
+    // Navigate to catalog (parent window)
+    alert(`Comanda #${order.orderNumber} a fost încărcată în coș.\n\nProdusele au fost încărcate în coș. Modifică cantitățile și trimite comanda din nou.`);
+    
+    // Signal parent to show catalog
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ action: 'showCatalog' }, '*');
+    }
+  } catch (e) {
+    console.error(e);
+    alert(e?.message || "Eroare la încărcarea comenzii.");
+  }
+}
+
 async function sendMessage() {
   if (!_chatOrder) return;
   const text = stripEmoji(String(chatInput.value || ""));
