@@ -11,6 +11,8 @@ import {
   orderBy,
   onSnapshot,
   addDoc,
+  deleteDoc,
+  doc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -60,16 +62,64 @@ function render() {
   items.forEach((order) => {
     const card = document.createElement("div");
     card.className = "order-card";
+    
+    const canEdit = order.status === "NEW";
+    
     card.innerHTML = `
       <div><b>Comanda #${order.orderNumber || "-"}</b></div>
       <div class="muted">Status: <b>${escapeHtml(order.status || "-")}</b></div>
       <div class="muted">Data: ${escapeHtml(formatDate(order.createdAt))}</div>
       <div style="margin-top:6px;">Total: <b>${escapeHtml(formatMoney(order.total))} RON</b></div>
-      <div class="btns"><button class="btnChat" type="button">Chat</button></div>
+      <div class="btns">
+        <button class="btnChat" type="button">Chat</button>
+        ${canEdit ? '<button class="btnEdit" type="button">Modifică comanda</button>' : ''}
+      </div>
     `;
+    
     card.querySelector(".btnChat").onclick = () => openChat(order);
+    
+    if (canEdit) {
+      card.querySelector(".btnEdit").onclick = () => editOrder(order);
+    }
+    
     listEl.appendChild(card);
   });
+}
+
+async function editOrder(order) {
+  if (!confirm(`Vrei să modifici comanda #${order.orderNumber}?\n\nProdusele din comandă vor fi încărcate în coș și vei putea edita cantitățile.`)) {
+    return;
+  }
+
+  try {
+    // Load cart module dynamically
+    const { clearCart, setQuantity } = await import('./cart.js');
+
+    // Clear current cart
+    await clearCart();
+
+    // Load order items into cart
+    const items = order.items || [];
+    for (const item of items) {
+      setQuantity(item.productId, item.qty);
+    }
+
+    // Delete old order (client can only delete NEW orders - enforced by Firestore rules)
+    await deleteDoc(doc(db, "orders", order.id));
+
+    // Redirect to catalog
+    alert(`Comanda #${order.orderNumber} a fost ștearsă.\n\nProdusele au fost încărcate în coș. Modifică cantitățile și trimite din nou comanda.`);
+    
+    // Redirect to parent catalog
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ action: "showCatalog" }, "*");
+    } else {
+      window.location.href = "/";
+    }
+  } catch (e) {
+    console.error(e);
+    alert(e?.message || "Eroare la modificarea comenzii.");
+  }
 }
 
 function loadOrders(uid) {
