@@ -11,7 +11,6 @@ import {
   orderBy,
   onSnapshot,
   addDoc,
-  deleteDoc,
   doc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
@@ -86,41 +85,6 @@ function render() {
   });
 }
 
-async function editOrder(order) {
-  if (!confirm(`Vrei să modifici comanda #${order.orderNumber}?\n\nProdusele din comandă vor fi încărcate în coș și vei putea edita cantitățile.`)) {
-    return;
-  }
-
-  try {
-    // Load cart module dynamically
-    const { clearCart, setQuantity } = await import('./js/cart.js');
-
-    // Clear current cart
-    await clearCart();
-
-    // Load order items into cart
-    const items = order.items || [];
-    for (const item of items) {
-      setQuantity(item.productId, item.qty);
-    }
-
-    // Delete old order (client can only delete NEW orders - enforced by Firestore rules)
-    await deleteDoc(doc(db, "orders", order.id));
-
-    // Redirect to catalog
-    alert(`Comanda #${order.orderNumber} a fost ștearsă.\n\nProdusele au fost încărcate în coș. Modifică cantitățile și trimite din nou comanda.`);
-    
-    // Redirect to parent catalog
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ action: "showCatalog" }, "*");
-    } else {
-      window.location.href = "/";
-    }
-  } catch (e) {
-    console.error(e);
-    alert(e?.message || "Eroare la modificarea comenzii.");
-  }
-}
 
 function loadOrders(uid) {
   if (_unsubOrders) { try { _unsubOrders(); } catch {} }
