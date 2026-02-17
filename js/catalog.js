@@ -306,11 +306,27 @@ function ensureCSSOnce() {
 
 function computeFinalPrice(p) {
   if (!_lastRenderOpts.showPrices) return 0;
+
   const base = asNumber(p.basePrice ?? p.price ?? 0);
   const rules = _lastRenderOpts.priceRules;
+
   if (!rules) return round2(base);
-  const pct = asNumber(rules.percent ?? rules.value ?? 0);
-  return round2(base * (1 + pct / 100));
+
+  // Try category override first
+  const categoryId = String(p.categoryId || p.category || "");
+  const categoriesObj = rules.categories || {};
+
+  let markup = 0;
+
+  if (categoryId && categoriesObj[categoryId] !== undefined) {
+    // Category override exists — use it (ignores global)
+    markup = asNumber(categoriesObj[categoryId]);
+  } else {
+    // No override — use global markup
+    markup = asNumber(rules.globalMarkup ?? 0);
+  }
+
+  return round2(base * (1 + markup / 100));
 }
 
 function productCardHTML(p) {
