@@ -1,7 +1,7 @@
 // js/adminOrders.js (FULL - status + chat + WhatsApp + PDF)
 
 console.log("adminOrders.js LOADED");
-
+alert("ADMINORDERS LOADED v999"); // ← AICI
 import { auth, db } from "./firebase.js";
 import { exportOrderPDFA4_PRO } from "./pdf-export.js";
 
