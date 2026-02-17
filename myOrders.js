@@ -156,6 +156,9 @@ async function editOrder(order) {
       }
     }
 
+    // Trigger cart update event manually
+    window.dispatchEvent(new CustomEvent('cart:updated'));
+
     // Store order ID for update
     sessionStorage.setItem('editingOrderId', order.id);
     sessionStorage.setItem('editingOrderNumber', order.orderNumber || '');
