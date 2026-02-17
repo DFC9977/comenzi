@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comenzile mele</title>
+  <style>
+    :root{color-scheme:dark;}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:#0b0f14; color:#e8eef7;}
+    .wrap{max-width:980px; margin:0 auto; padding:14px;}
+    .top{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px;}
+    .title{font-size:18px; font-weight:900;}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    select, button{border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); color:inherit; padding:10px 12px; font-weight:800;}
+    button{cursor:pointer;}
+    button:disabled{opacity:.55; cursor:not-allowed;}
+    .order-card{border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.03); border-radius:16px; padding:12px; margin:10px 0;}
+    .muted{opacity:.8;}
+    .btns{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+
+    /* chat bottom sheet */
+    #chatOverlay{position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; z-index:9998;}
+    #chatSheet{position:fixed; left:0; right:0; bottom:0; transform:translateY(110%); transition:transform .22s ease; z-index:9999;
+      background:rgba(10,12,16,.92); border-top:1px solid rgba(255,255,255,.12); border-radius:16px 16px 0 0; backdrop-filter:blur(10px); padding:12px;}
+    #chatSheet.open{transform:translateY(0);}
+    #chatHeader{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
+    #chatHeader .t{font-weight:900; font-size:14px;}
+    #chatClose{border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#fff; border-radius:12px; padding:8px 10px; font-weight:900; cursor:pointer;}
+    #chatBody{max-height:55vh; overflow:auto; -webkit-overflow-scrolling:touch; padding-right:4px; display:flex; flex-direction:column; gap:8px;}
+    .msg{border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.04); border-radius:12px; padding:10px;}
+    .msg.me{border-color: rgba(120,200,255,.18);}
+    .msg .meta{font-size:11px; opacity:.75; margin-bottom:4px;}
+    .msg .txt{white-space:pre-wrap; word-break:break-word; color:#fff;}
+    #chatComposer{display:flex; gap:8px; margin-top:10px;}
+    #chatInput{flex:1; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); color:#fff; padding:10px; outline:none;}
+    #chatSend{border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.10); color:#fff; font-weight:900; padding:10px 12px; cursor:pointer;}
+    body.chat-open{overflow:hidden;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title">Comenzile mele</div>
+      <div class="row">
+        <select id="filterStatus">
+          <option value="ALL">Toate</option>
+          <option value="NEW">NEW</option>
+          <option value="CONFIRMED">CONFIRMED</option>
+          <option value="SENT">SENT</option>
+          <option value="DELIVERED">DELIVERED</option>
+          <option value="CANCELED">CANCELED</option>
+        </select>
+        <button id="refreshBtn" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div id="ordersList"></div>
+    <div id="note" class="muted" style="margin-top:10px;"></div>
+  </div>
+
+  <div id="chatOverlay"></div>
+  <div id="chatSheet">
+    <div id="chatHeader">
+      <div class="t" id="chatTitle">Chat</div>
+      <button id="chatClose" type="button">Închide</button>
+    </div>
+    <div id="chatBody"></div>
+    <div id="chatComposer">
+      <input id="chatInput" type="text" placeholder="Scrie mesaj (fără emoji)…" maxlength="800" />
+      <button id="chatSend" type="button">Trimite</button>
+    </div>
+  </div>
+
+  <script type="module" src="./myOrders.js"></script>
+</body>
+</html>
