@@ -25,7 +25,9 @@ import {
 /* DEBUG GLOBAL (pentru Console) */
 window.__AUTH = auth;
 window.__DB = db;
-console.warn("DEBUG __AUTH set:", !!window.__AUTH);
+
+console.warn("DEBUG: window.__AUTH =", window.__AUTH);
+console.warn("DEBUG: window.__AUTH.currentUser =", window.__AUTH?.currentUser);
 
 /* =========================
    DOM
