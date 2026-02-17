@@ -93,7 +93,7 @@ async function editOrder(order) {
 
   try {
     // Load cart module dynamically
-    const { clearCart, setQuantity } = await import('./cart.js');
+    const { clearCart, setQuantity } = await import('./js/cart.js');
 
     // Clear current cart
     await clearCart();
