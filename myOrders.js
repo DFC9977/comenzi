@@ -1,6 +1,10 @@
 import { auth, db } from "./firebase.js";
 
 import {
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+import {
   collection,
   query,
   where,
@@ -109,7 +113,6 @@ function loadOrders(uid) {
     try { _unsubOrders(); } catch {}
   }
 
-  // Avoid composite index requirements: no orderBy in query; we sort in UI
   const q = query(collection(db, "orders"), where("clientId", "==", uid));
 
   _unsubOrders = onSnapshot(
@@ -207,12 +210,17 @@ async function sendMessage() {
 
   chatInput.value = "";
 
-  await addDoc(collection(db, "orders", _chatOrder.id, "messages"), {
-    text,
-    fromUid: auth.currentUser?.uid || null,
-    fromRole: "client",
-    createdAt: serverTimestamp()
-  });
+  try {
+    await addDoc(collection(db, "orders", _chatOrder.id, "messages"), {
+      text,
+      fromUid: auth.currentUser?.uid || null,
+      fromRole: "client",
+      createdAt: serverTimestamp()
+    });
+  } catch (e) {
+    console.error(e);
+    alert(e?.message || "Eroare la trimitere mesaj.");
+  }
 }
 
 /* =========================
@@ -230,30 +238,19 @@ chatInput.addEventListener("keydown", (e) => {
 });
 
 /* =========================
-   Init
+   Init — onAuthStateChanged în loc de polling
+   (funcționează corect și în iframe)
 ========================= */
 
-function boot() {
-  const user = auth.currentUser;
+onAuthStateChanged(auth, (user) => {
   if (!user) {
     setNote("Trebuie să fii autentificat.");
     listEl.innerHTML = "";
+    if (_unsubOrders) {
+      try { _unsubOrders(); } catch {}
+      _unsubOrders = null;
+    }
     return;
   }
   loadOrders(user.uid);
-}
-
-// firebase-auth already initialized in firebase.js; auth.currentUser may be delayed.
-// Simple polling (safe) – avoids importing onAuthStateChanged here.
-let tries = 0;
-const t = setInterval(() => {
-  tries++;
-  if (auth.currentUser) {
-    clearInterval(t);
-    boot();
-  }
-  if (tries > 50) {
-    clearInterval(t);
-    boot();
-  }
-}, 100);
+});
