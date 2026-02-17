@@ -163,6 +163,9 @@ async function editOrder(order) {
     sessionStorage.setItem('editingOrderId', order.id);
     sessionStorage.setItem('editingOrderNumber', order.orderNumber || '');
 
+    // Wait a bit to ensure localStorage is saved
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Navigate to catalog (parent window)
     alert(`Comanda #${order.orderNumber} a fost încărcată în coș.\n\nProdusele au fost încărcate în coș. Modifică cantitățile și trimite comanda din nou.`);
     
