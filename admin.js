@@ -178,7 +178,7 @@ function renderUserCard(uid, u, isPending) {
       </label>
 
       <label>Adaos global (%):
-        <input class="globalMarkup" type="number" step="0.01" min="0" />
+        <input class="globalMarkup" type="number" step="0.01" />
       </label>
 
       ${isPending ? `<button class="approve">Aprobă</button>` : `<button class="deactivate">Trece în pending</button>`}
@@ -186,11 +186,11 @@ function renderUserCard(uid, u, isPending) {
 
     <div class="card" style="background:#fafafa">
       <b>Adaos pe categorie (override)</b><br>
-      <small>Dacă nu există override, se aplică adaosul global.</small>
+      <small>Dacă există override, se ignoră adaosul global pentru acea categorie. Poți folosi valori negative pentru discount.</small>
 
       <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:10px; align-items:center;">
         <select class="catSelect"></select>
-        <input class="catMarkup" type="number" step="0.01" min="0" placeholder="% categorie" />
+        <input class="catMarkup" type="number" step="0.01" placeholder="% (ex: -10, 0, 15)" />
         <button class="setCat">Setează/Actualizează</button>
         <button class="delCat">Șterge override</button>
       </div>
@@ -267,8 +267,8 @@ function renderUserCard(uid, u, isPending) {
 
       if (!f.clientType) return alert("Selectează tip client.");
       if (!f.channel) return alert("Selectează canalul.");
-      if (!Number.isFinite(f.globalMarkup) || f.globalMarkup <= 0) {
-        return alert("Setează adaos global (%) > 0 înainte de aprobare.");
+      if (!Number.isFinite(f.globalMarkup)) {
+        return alert("Setează adaos global (%) valid.");
       }
 
       if (f.channel === "recomandare_crescator" && !f.referrerUid) {
@@ -307,9 +307,12 @@ function renderUserCard(uid, u, isPending) {
     const catId = div.querySelector(".catSelect").value;
     if (!catId) return alert("Nu există categorie selectată.");
 
-    const markup = Number(div.querySelector(".catMarkup").value || 0);
-    if (!Number.isFinite(markup) || markup <= 0) {
-      return alert("Adaos categorie trebuie să fie > 0.");
+    const input = div.querySelector(".catMarkup").value.trim();
+    if (!input) return alert("Completează adaosul pentru categorie.");
+
+    const markup = Number(input);
+    if (!Number.isFinite(markup)) {
+      return alert("Adaos categorie trebuie să fie un număr valid.");
     }
 
     await updateDoc(doc(db, "users", uid), {
