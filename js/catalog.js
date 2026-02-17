@@ -387,18 +387,6 @@ function productCardHTML(p) {
   `;
 }
 
-      ${showPrice ? `
-        <div class="qty-controls">
-          <button type="button" data-action="dec">-</button>
-          <span class="qty" id="qty-${escHtml(id)}">${qty}</span>
-          <button type="button" data-action="inc">+</button>
-          <button type="button" data-action="add" style="margin-left:auto;">Adaugă</button>
-        </div>
-      ` : ""}
-    </div>
-  `;
-}
-
 function ensureCheckoutBar(grid) {
   const host = grid?.parentElement || document.getElementById("screenCatalog") || document.body;
 
