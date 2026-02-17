@@ -4,6 +4,7 @@ console.log("adminOrders.js LOADED");
 
 import { auth, db } from "./firebase.js";
 import { exportOrderPDFA4_PRO } from "./pdf-export.js";
+
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 import {
@@ -18,6 +19,11 @@ import {
   Timestamp,
   arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+// DEBUG AUTH (temporar)
+onAuthStateChanged(auth, (u) => {
+  console.log("AUTH STATE:", u);
+});
 
 /* =========================
    DOM
