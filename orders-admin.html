@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Administrare comenzi</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- ✅ NECESAR pentru export PDF (pdf-export.js folosește window.jspdf + autoTable) -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 
 <body>
-
   <h2>Administrare comenzi</h2>
 
-  <div style="margin-bottom:10px;">
+  <div style="margin-bottom:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
     <select id="filterStatus">
       <option value="ALL">Toate</option>
       <option value="NEW">NEW</option>
@@ -20,13 +24,12 @@
       <option value="CANCELED">CANCELED</option>
     </select>
 
-    <button id="refreshBtn">Refresh</button>
+    <button id="refreshBtn" type="button">Refresh</button>
   </div>
 
   <div id="ordersList"></div>
 
-  <!-- AICI se încarcă JS-ul real -->
+  <!-- ✅ IMPORTANT: încarcă JS-ul tău real -->
   <script type="module" src="./js/adminOrders.js"></script>
-
 </body>
 </html>
