@@ -41,7 +41,11 @@ window.addEventListener("catalog:submitOrderRequested", async (event) => {
 
     await clearCart();
 
-    alert(`Comanda #${result.orderNumber} a fost trimisă.`);
+    const msg = result.updated 
+      ? `Comanda #${result.orderNumber} a fost actualizată.`
+      : `Comanda #${result.orderNumber} a fost trimisă.`;
+    
+    alert(msg);
   } catch (err) {
     console.error(err);
     alert(err.message || "Eroare la trimiterea comenzii.");
@@ -378,6 +382,13 @@ showOnly(screenLoading);
 setSessionText(null);
 
 updateCartUI();
+
+// Listen for messages from iframe (my-orders.html) to show catalog
+window.addEventListener('message', (event) => {
+  if (event.data?.action === 'showCatalog') {
+    showOnly(screenCatalog);
+  }
+});
 
 onAuthStateChanged(auth, async (user) => {
   clearNote(loginMsg);
