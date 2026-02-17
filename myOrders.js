@@ -138,6 +138,10 @@ function renderChat(msgs) {
 }
 
 async function editOrder(order) {
+  // Clear any previous editing state first
+  sessionStorage.removeItem('editingOrderId');
+  sessionStorage.removeItem('editingOrderNumber');
+
   if (!confirm(`Vrei să modifici comanda #${order.orderNumber || ""}?\n\nProdusele din comandă vor fi încărcate în coș și vei putea edita cantitățile.`)) {
     return;
   }
