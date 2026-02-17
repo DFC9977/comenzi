@@ -412,3 +412,14 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+// Add to app.js at the end
+
+// Listen for postMessage from iframe (e.g., myOrders.js requesting catalog)
+window.addEventListener("message", (event) => {
+  if (event.data?.action === "showCatalog") {
+    const screenCatalog = document.getElementById("screenCatalog");
+    if (screenCatalog) {
+      showOnly(screenCatalog);
+    }
+  }
+});
