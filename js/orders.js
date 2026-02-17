@@ -26,6 +26,10 @@ export async function submitOrder({ clientId, items }) {
   const user = auth.currentUser;
   if (!user) throw new Error("Trebuie să fii logat.");
 
+  // Check if editing existing order
+  const editingOrderId = sessionStorage.getItem('editingOrderId');
+  const editingOrderNumber = sessionStorage.getItem('editingOrderNumber');
+
   // ✅ items vin din catalog.js prin event.detail.items
   const safeItems = Array.isArray(items) ? items : [];
   if (!safeItems.length) throw new Error("Coș gol.");
@@ -67,7 +71,45 @@ export async function submitOrder({ clientId, items }) {
     channel: userData.channel || ""
   };
 
-  // ===== order number & write =====
+  // ===== UPDATE existing order or CREATE new =====
+  if (editingOrderId) {
+    // Update existing order
+    const orderRef = doc(db, "orders", editingOrderId);
+    const orderSnap = await getDoc(orderRef);
+
+    if (!orderSnap.exists()) {
+      sessionStorage.removeItem('editingOrderId');
+      sessionStorage.removeItem('editingOrderNumber');
+      throw new Error("Comanda nu mai există.");
+    }
+
+    const orderData = orderSnap.data();
+
+    // Only allow editing if status is NEW
+    if (orderData.status !== "NEW") {
+      sessionStorage.removeItem('editingOrderId');
+      sessionStorage.removeItem('editingOrderNumber');
+      throw new Error("Poți modifica doar comenzi cu status NEW.");
+    }
+
+    // Update order
+    await runTransaction(db, async (tx) => {
+      tx.update(orderRef, {
+        items: normalized,
+        total,
+        clientSnapshot,
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    // Clear editing state
+    sessionStorage.removeItem('editingOrderId');
+    sessionStorage.removeItem('editingOrderNumber');
+
+    return { orderNumber: editingOrderNumber || orderData.orderNumber, updated: true };
+  }
+
+  // ===== CREATE new order =====
   const counterRef = doc(db, "counters", "orders");
 
   const result = await runTransaction(db, async (tx) => {
@@ -93,7 +135,7 @@ export async function submitOrder({ clientId, items }) {
       statusHistory: [
         {
           status: "NEW",
-          at: Timestamp.now(), // ✅ OK in arrays
+          at: Timestamp.now(),
           adminUid: null
         }
       ],
@@ -101,7 +143,7 @@ export async function submitOrder({ clientId, items }) {
       updatedAt: serverTimestamp()
     });
 
-    return { orderNumber: nextNumber };
+    return { orderNumber: nextNumber, updated: false };
   });
 
   return result;
