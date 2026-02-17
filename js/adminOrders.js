@@ -5,7 +5,10 @@ console.log("adminOrders.js LOADED");
 import { auth, db } from "./firebase.js";
 import { exportOrderPDFA4_PRO } from "./pdf-export.js";
 
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import {
+  onAuthStateChanged,
+  getIdToken
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 import {
   collection,
@@ -20,10 +23,11 @@ import {
   arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-// DEBUG AUTH (temporar)
-onAuthStateChanged(auth, (u) => {
-  console.log("AUTH STATE:", u);
-});
+/* =========================
+   DEBUG GLOBAL (pentru Console)
+========================= */
+window.__AUTH = auth;
+window.__DB = db;
 
 /* =========================
    DOM
@@ -34,12 +38,20 @@ const filterEl = document.getElementById("filterStatus");
 const refreshBtn = document.getElementById("refreshBtn");
 
 let ordersData = [];
+let _unsubOrders = null;
+
 let _unsubChat = null;
 let _chatOrderId = null;
 
 /* =========================
    Helpers
 ========================= */
+
+function setTopMessage(html) {
+  // afișăm mesajele de stare chiar în listă dacă există
+  if (!listEl) return;
+  listEl.innerHTML = `<div style="opacity:.92; padding:10px; border:1px solid rgba(255,255,255,.10); border-radius:12px; background:rgba(255,255,255,.03);">${html}</div>`;
+}
 
 function formatMoney(v) {
   return Number(v || 0).toLocaleString("ro-RO");
@@ -54,7 +66,7 @@ function safePhone(raw) {
   return String(raw || "").replace(/\D/g, "");
 }
 
-// best-effort: remove emoji (client asked "fără emoji")
+// best-effort: remove emoji
 function stripEmoji(s) {
   try {
     return String(s || "")
@@ -202,7 +214,7 @@ function ensureChatSheetOnce() {
 
 function openChat(order) {
   ensureChatSheetOnce();
-  closeChat(); // close any previous listener
+  closeChat();
 
   _chatOrderId = order?.id || null;
   if (!_chatOrderId) return;
@@ -324,7 +336,6 @@ async function setOrderStatus(order, newStatus) {
     note = stripEmoji(prompt("Notă confirmare (ex: Confirmat în chat / telefon).", "Confirmat în chat") || "");
   }
 
-  // update order doc
   await updateDoc(doc(db, "orders", order.id), {
     status: newStatus,
     updatedAt: serverTimestamp(),
@@ -336,7 +347,6 @@ async function setOrderStatus(order, newStatus) {
     })
   });
 
-  // also post a system message in chat (optional but useful)
   const systemMsg = note
     ? `Status actualizat: ${newStatus}. ${note}`
     : `Status actualizat: ${newStatus}.`;
@@ -398,10 +408,8 @@ function render() {
       </div>
     `;
 
-    // Chat
     card.querySelector(".chatBtn").onclick = () => openChat(order);
 
-    // WhatsApp
     card.querySelector(".waBtn").onclick = () => {
       const phone = safePhone(client.phone);
       if (!phone) {
@@ -412,7 +420,6 @@ function render() {
       window.open(`https://wa.me/${phone}?text=${msg}`);
     };
 
-    // Export PDF (async)
     card.querySelector(".exportBtn").onclick = async () => {
       try {
         await exportOrderPDFA4_PRO(order, db);
@@ -422,18 +429,16 @@ function render() {
       }
     };
 
-    // Status select
     const sel = card.querySelector(".statusSelect");
     sel.onchange = async () => {
       const newStatus = sel.value;
       try {
         await setOrderStatus(order, newStatus);
-        order.status = newStatus; // optimistic update
+        order.status = newStatus;
         alert("Status actualizat.");
       } catch (e) {
         console.error(e);
         alert(e?.message || "Eroare la actualizare status.");
-        // revert
         sel.value = order.status || "NEW";
       }
     };
@@ -446,12 +451,21 @@ function render() {
    Firestore Listener
 ========================= */
 
+function stopOrdersListener() {
+  if (_unsubOrders) {
+    try { _unsubOrders(); } catch {}
+  }
+  _unsubOrders = null;
+}
+
 function loadOrders() {
   if (!listEl) return;
 
+  stopOrdersListener();
+
   const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
 
-  onSnapshot(
+  _unsubOrders = onSnapshot(
     q,
     (snap) => {
       ordersData = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
@@ -459,7 +473,20 @@ function loadOrders() {
     },
     (err) => {
       console.error("Orders onSnapshot error:", err);
-      listEl.innerHTML = `<div style="opacity:.9;">Eroare încărcare comenzi: ${escapeHtml(err?.message || "")}</div>`;
+
+      const code = err?.code || "";
+      const msg = err?.message || "";
+
+      if (code === "permission-denied") {
+        setTopMessage(
+          `PERMISSION DENIED la /orders.<br/>
+           <b>Testează în Console:</b> <code>__AUTH.currentUser</code><br/>
+           Dacă e null, nu ești logat real în Firebase Auth.`
+        );
+        return;
+      }
+
+      setTopMessage(`Eroare încărcare comenzi: ${escapeHtml(msg)}`);
     }
   );
 }
@@ -475,7 +502,23 @@ if (refreshBtn) refreshBtn.addEventListener("click", render);
    Init
 ========================= */
 
-onAuthStateChanged(auth, (user) => {
-  if (!user) return;
+setTopMessage("Se verifică autentificarea…");
+
+onAuthStateChanged(auth, async (user) => {
+  console.log("AUTH STATE:", user ? { uid: user.uid, phone: user.phoneNumber } : null);
+
+  if (!user) {
+    stopOrdersListener();
+    setTopMessage("Nu ești logat în Firebase Auth. Reautentifică-te.");
+    return;
+  }
+
+  try {
+    // forțează token fresh (important când ai schimbat config / reguli / sesiuni)
+    await getIdToken(user, true);
+  } catch (e) {
+    console.warn("getIdToken(true) failed:", e);
+  }
+
   loadOrders();
 });
