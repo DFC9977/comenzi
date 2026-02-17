@@ -23,11 +23,10 @@ import {
   arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-/* =========================
-   DEBUG GLOBAL (pentru Console)
-========================= */
+/* DEBUG GLOBAL (pentru Console) */
 window.__AUTH = auth;
 window.__DB = db;
+console.warn("DEBUG __AUTH set:", !!window.__AUTH);
 
 /* =========================
    DOM
