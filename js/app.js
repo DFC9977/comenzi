@@ -70,6 +70,9 @@ const btnLogout = document.getElementById("btnLogout");
 const btnAdmin = document.getElementById("btnAdmin");
 const btnOrdersAdmin = document.getElementById("btnOrdersAdmin");
 
+// session flags (used for routing buttons without touching HTML)
+let __isAdminSession = false;
+
 const loginPhone = document.getElementById("loginPhone");
 const loginPass = document.getElementById("loginPass");
 const btnLogin = document.getElementById("btnLogin");
@@ -149,6 +152,7 @@ function setSessionText(user) {
     btnLogout.hidden = true;
     if (btnAdmin) btnAdmin.style.display = "none";
     if (btnOrdersAdmin) btnOrdersAdmin.style.display = "none";
+    __isAdminSession = false;
     return;
   }
   const phone = (user.email || "").replace("@phone.local", "");
@@ -317,7 +321,9 @@ btnAdmin?.addEventListener("click", () => {
 
 btnOrdersAdmin?.addEventListener("click", () => {
   showOnly(screenAdmin);
-  if (adminFrame) adminFrame.src = "./orders-admin.html?v=" + Date.now();
+  // admin: orders-admin.html | client: my-orders.html
+  const page = __isAdminSession ? "./orders-admin.html" : "./my-orders.html";
+  if (adminFrame) adminFrame.src = page + "?v=" + Date.now();
 });
 
 btnBackToCatalog?.addEventListener("click", () => {
@@ -332,8 +338,10 @@ async function routeAfterAuth(user) {
   const profile = (await getUserProfile(user.uid)) || base;
 
   const isAdmin = profile?.role === "admin";
+  __isAdminSession = !!isAdmin;
   if (btnAdmin) btnAdmin.style.display = isAdmin ? "inline-block" : "none";
-  if (btnOrdersAdmin) btnOrdersAdmin.style.display = isAdmin ? "inline-block" : "none";
+  // "Comenzi" is useful for clients too (their own orders).
+  if (btnOrdersAdmin) btnOrdersAdmin.style.display = "inline-block";
 
   if (!isContactComplete(profile)) {
     fullName.value = profile?.contact?.fullName || "";
