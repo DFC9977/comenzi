@@ -181,7 +181,7 @@ function renderUserCard(uid, u, isPending) {
         <input class="globalMarkup" type="number" step="0.01" />
       </label>
 
-      ${isPending ? `<button class="approve">Aprobă</button>` : `<button class="deactivate">Trece în pending</button>`}
+      ${isPending ? `<button class="approve">Aprobă</button>` : `<button class="save">Salvează modificări</button><button class="deactivate">Trece în pending</button>`}
     </div>
 
     <div class="card" style="background:#fafafa">
@@ -293,6 +293,39 @@ function renderUserCard(uid, u, isPending) {
       await loadUsers();
     };
   } else {
+    // Active client — Save button
+    div.querySelector(".save").onclick = async () => {
+      const f = readForm();
+
+      if (!f.clientType) return alert("Selectează tip client.");
+      if (!f.channel) return alert("Selectează canalul.");
+      if (!Number.isFinite(f.globalMarkup)) {
+        return alert("Setează adaos global (%) valid.");
+      }
+
+      if (f.channel === "recomandare_crescator" && !f.referrerUid) {
+        return alert("Selectează afiliatul (Recomandat de).");
+      }
+
+      const ref = ALL_USERS.find((x) => x.uid === f.referrerUid);
+
+      await updateDoc(doc(db, "users", uid), {
+        clientType: f.clientType,
+        channel: f.channel,
+        referrerUid: (f.channel === "recomandare_crescator") ? f.referrerUid : "",
+        referrerPhone: (f.channel === "recomandare_crescator") ? (ref?.phone || "") : "",
+        priceRules: {
+          globalMarkup: f.globalMarkup,
+          categories: categoriesObj || {},
+        },
+        updatedAt: serverTimestamp(),
+      });
+
+      alert("Modificări salvate.");
+      await loadUsers();
+    };
+
+    // Deactivate button
     div.querySelector(".deactivate").onclick = async () => {
       await updateDoc(doc(db, "users", uid), {
         status: "pending",
