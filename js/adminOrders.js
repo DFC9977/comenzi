@@ -1,6 +1,9 @@
 // js/adminOrders.js (FULL - status + chat + WhatsApp + PDF)
 
 console.log("adminOrders.js LOADED");
+console.warn("ADMINORDERS TOP LINE RUNS");
+window.__X = 123;
+
 import { auth, db } from "./firebase.js";
 import { exportOrderPDFA4_PRO } from "./pdf-export.js";
 
