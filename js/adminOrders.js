@@ -4,6 +4,7 @@ console.log("adminOrders.js LOADED");
 
 import { auth, db } from "./firebase.js";
 import { exportOrderPDFA4_PRO } from "./pdf-export.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 import {
   collection,
@@ -468,4 +469,7 @@ if (refreshBtn) refreshBtn.addEventListener("click", render);
    Init
 ========================= */
 
-loadOrders();
+onAuthStateChanged(auth, (user) => {
+  if (!user) return;
+  loadOrders();
+});
