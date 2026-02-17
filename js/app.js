@@ -323,7 +323,8 @@ btnOrdersAdmin?.addEventListener("click", () => {
   showOnly(screenAdmin);
   // admin: orders-admin.html | client: my-orders.html
   const page = __isAdminSession ? "./orders-admin.html" : "./my-orders.html";
-  if (adminFrame) adminFrame.src = page + "?v=" + Date.now();
+  const uid = auth.currentUser?.uid || "";
+  if (adminFrame) adminFrame.src = page + "?v=" + Date.now() + "&uid=" + encodeURIComponent(uid);
 });
 
 btnBackToCatalog?.addEventListener("click", () => {
