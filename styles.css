@@ -193,3 +193,18 @@ textarea{ resize:vertical; }
   border-radius: 12px;
   padding: 16px;
 }
+
+/* ---- Cart font +2 ---- */
+#btnCart {
+  font-size: 17px;
+}
+#cartCount {
+  font-size: 17px;
+}
+.product .pprice {
+  font-size: 17px;
+}
+/* Cart modal / drawer items */
+.cart-item-name  { font-size: 17px; }
+.cart-item-price { font-size: 17px; }
+.cart-total      { font-size: 19px; }
