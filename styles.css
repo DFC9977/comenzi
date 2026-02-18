@@ -208,3 +208,18 @@ textarea{ resize:vertical; }
 .cart-item-name  { font-size: 17px; }
 .cart-item-price { font-size: 17px; }
 .cart-total      { font-size: 19px; }
+/* ---- Nav buttons topbar ---- */
+.nav-btn {
+  position: relative;
+  overflow: visible !important;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .actions { gap: 4px; }
+  .nav-btn { padding: 8px 10px; font-size: 13px; }
+}
