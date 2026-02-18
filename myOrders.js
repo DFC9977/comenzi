@@ -376,8 +376,9 @@ function loadMessagesPanel(uid) {
       // Click deschide chat
       card.onclick = () => openChat(order.id, order.orderNumber || "—");
     });
-  }, () => {
-    container.innerHTML = '<div style="color:#ff5d5d;padding:10px;">Eroare la încărcarea mesajelor.</div>';
+  }, (err) => {
+    console.error("loadMessagesPanel error:", err?.code, err?.message, err);
+    container.innerHTML = `<div style="color:#ff5d5d;padding:10px;">Eroare: ${err?.code || ""} ${err?.message || ""}</div>`;
   });
 
   _msgPanelUnsubs.push(unsub);
