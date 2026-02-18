@@ -3,6 +3,7 @@ import { auth, db } from "./firebase.js";
 
 import {
   onAuthStateChanged,
+  getIdToken,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 import {
@@ -116,6 +117,8 @@ async function markPromosRead() {
     _seenPromos = [..._seenPromos, ...newSeen];
     renderPromos();
     updateBadge();
+    // Notifică parent să ascundă badge-ul
+    window.parent?.postMessage({ action: "promosRead" }, "*");
   } catch (e) {
     console.error("markPromosRead:", e);
   }
@@ -127,5 +130,10 @@ window.__markPromosRead = markPromosRead;
 onAuthStateChanged(auth, async (user) => {
   if (!user) return;
   _uid = user.uid;
+  try { await getIdToken(user, true); } catch {}
+  await new Promise(r => setTimeout(r, 200));
   await loadPromos();
+
+  // Notifică parent că promoțiile au fost citite când tab-ul e deschis
+  window.parent?.postMessage({ action: "promosRead" }, "*");
 });
