@@ -367,8 +367,97 @@ async function setOrderStatus(order, newStatus) {
    Render orders list
 ========================= */
 
+/* =========================
+   Render lista produse din comandă (mobile-friendly, verticală)
+========================= */
+
+function renderOrderItems(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return `<div style="opacity:.6; font-size:13px; padding:6px 0;">Fără produse salvate.</div>`;
+  }
+
+  const rows = items.map((it) => {
+    const name = escapeHtml(String(it.name || it.productId || "—"));
+    const qty = Number(it.qty || 0);
+    const unit = Number(it.unitPriceFinal ?? it.unit ?? 0);
+    const line = Number(it.lineTotal ?? (unit * qty));
+
+    return `
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        padding:8px 0;
+        border-bottom:1px solid rgba(255,255,255,.07);
+        gap:8px;
+      ">
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
+          <div style="font-size:12px; opacity:.65; margin-top:2px;">${qty} buc × ${formatMoney(unit)} RON</div>
+        </div>
+        <div style="font-weight:900; font-size:15px; white-space:nowrap; color:#4da3ff;">${formatMoney(line)} RON</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div style="
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:4px 12px;
+      margin-top:10px;
+    ">
+      <div style="font-size:12px; font-weight:800; opacity:.5; text-transform:uppercase; letter-spacing:.5px; padding:8px 0 4px;">Produse comandă</div>
+      ${rows}
+    </div>
+  `;
+}
+
+/* =========================
+   Badge mesaje necitite per comandă
+========================= */
+
+// Stochează unsubscribe-urile pentru badge-uri
+const _badgeUnsubs = new Map();
+
+function listenOrderBadge(orderId, badgeEl) {
+  // Oprește listener anterior dacă există
+  if (_badgeUnsubs.has(orderId)) {
+    try { _badgeUnsubs.get(orderId)(); } catch {}
+  }
+
+  const q = query(
+    collection(db, "orders", orderId, "messages"),
+    orderBy("createdAt", "asc")
+  );
+
+  const unsub = onSnapshot(q, (snap) => {
+    // Numără mesajele de la client (necitite de admin = cele de la role "client")
+    const unread = snap.docs.filter(d => {
+      const data = d.data();
+      return data.fromRole === "client" && !data.readByAdmin;
+    }).length;
+
+    if (badgeEl) {
+      if (unread > 0) {
+        badgeEl.textContent = unread;
+        badgeEl.style.display = "inline-flex";
+      } else {
+        badgeEl.style.display = "none";
+      }
+    }
+  }, () => {});
+
+  _badgeUnsubs.set(orderId, unsub);
+}
+
 function render() {
   if (!listEl) return;
+
+  // Oprește badge listeners vechi
+  _badgeUnsubs.forEach(unsub => { try { unsub(); } catch {} });
+  _badgeUnsubs.clear();
 
   const filter = filterEl?.value || "ALL";
   const items = ordersData.filter((o) => (filter === "ALL" ? true : o.status === filter));
@@ -376,43 +465,140 @@ function render() {
   listEl.innerHTML = "";
 
   if (!items.length) {
-    listEl.innerHTML = "<div style='opacity:.85;'>Nu există comenzi.</div>";
+    listEl.innerHTML = "<div style='opacity:.85; padding:10px;'>Nu există comenzi.</div>";
     return;
   }
 
   items.forEach((order) => {
     const card = document.createElement("div");
     card.className = "order-card";
-    card.style.border = "1px solid rgba(255,255,255,.10)";
-    card.style.background = "rgba(255,255,255,.03)";
-    card.style.borderRadius = "12px";
-    card.style.padding = "12px";
-    card.style.margin = "10px 0";
+    card.style.cssText = `
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.03);
+      border-radius:16px;
+      padding:14px;
+      margin:10px 0;
+    `;
 
     const client = order.clientSnapshot || {};
     const clientLine = `${client.fullName || "—"} • ${client.phone || "—"}`;
+    const statusColor = {
+      NEW: "#4da3ff",
+      CONFIRMED: "#35d07f",
+      SENT: "#f5a623",
+      DELIVERED: "#9fb0c3",
+      CANCELED: "#ff5d5d"
+    }[order.status || "NEW"] || "#4da3ff";
 
     card.innerHTML = `
-      <div><b>Comanda #${order.orderNumber || "-"}</b></div>
-      <div style="opacity:.85; margin-top:2px;">Client: ${escapeHtml(clientLine)}</div>
-
-      <div style="margin-top:8px;">
-        Status:
-        <select class="statusSelect">${statusOptionsHtml(order.status || "NEW")}</select>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+        <div>
+          <div style="font-weight:900; font-size:16px;">Comanda #${order.orderNumber || "-"}</div>
+          <div style="opacity:.8; margin-top:3px; font-size:14px;">${escapeHtml(clientLine)}</div>
+          <div style="font-size:12px; opacity:.6; margin-top:2px;">${formatDate(order.createdAt)}</div>
+        </div>
+        <div style="
+          background:${statusColor}22;
+          border:1px solid ${statusColor}55;
+          color:${statusColor};
+          border-radius:20px;
+          padding:4px 10px;
+          font-size:12px;
+          font-weight:800;
+          white-space:nowrap;
+          flex-shrink:0;
+        ">${escapeHtml(order.status || "NEW")}</div>
       </div>
 
-      <div style="margin-top:6px; opacity:.9;">Data: ${formatDate(order.createdAt)}</div>
-      <div style="opacity:.9;">Total: ${formatMoney(order.total)} RON</div>
+      <div style="margin-top:10px; font-size:13px;">
+        <label style="display:block; opacity:.6; margin-bottom:4px; font-size:12px;">Schimbă status:</label>
+        <select class="statusSelect" style="
+          width:100%;
+          padding:10px 12px;
+          border-radius:12px;
+          border:1px solid rgba(255,255,255,.18);
+          background:rgba(255,255,255,.06);
+          color:#fff;
+          font-size:14px;
+        ">${statusOptionsHtml(order.status || "NEW")}</select>
+      </div>
 
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
-        <button class="chatBtn" type="button">Chat</button>
-        <button class="waBtn" type="button">WhatsApp</button>
-        <button class="exportBtn" type="button">Export PDF</button>
+      ${renderOrderItems(order.items)}
+
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-top:12px;
+        padding-top:10px;
+        border-top:1px solid rgba(255,255,255,.08);
+      ">
+        <span style="opacity:.7; font-size:13px;">Total comandă</span>
+        <span style="font-weight:900; font-size:18px; color:#35d07f;">${formatMoney(order.total)} RON</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:12px;">
+        <button class="chatBtn" type="button" style="
+          position:relative;
+          padding:12px 8px;
+          border-radius:12px;
+          border:1px solid rgba(255,255,255,.18);
+          background:rgba(255,255,255,.06);
+          color:#fff;
+          font-weight:800;
+          font-size:13px;
+          cursor:pointer;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          gap:4px;
+        ">
+          💬 Chat
+          <span class="chatBadge" style="
+            display:none;
+            background:#ff5d5d;
+            color:#fff;
+            border-radius:50%;
+            width:18px;
+            height:18px;
+            font-size:10px;
+            font-weight:900;
+            align-items:center;
+            justify-content:center;
+            flex-shrink:0;
+          "></span>
+        </button>
+        <button class="waBtn" type="button" style="
+          padding:12px 8px;
+          border-radius:12px;
+          border:1px solid rgba(37,211,102,.35);
+          background:rgba(37,211,102,.08);
+          color:#25d366;
+          font-weight:800;
+          font-size:13px;
+          cursor:pointer;
+        ">📱 WA</button>
+        <button class="exportBtn" type="button" style="
+          padding:12px 8px;
+          border-radius:12px;
+          border:1px solid rgba(255,255,255,.18);
+          background:rgba(255,255,255,.06);
+          color:#fff;
+          font-weight:800;
+          font-size:13px;
+          cursor:pointer;
+        ">📄 PDF</button>
       </div>
     `;
 
+    // Badge mesaje necitite
+    const badgeEl = card.querySelector(".chatBadge");
+    listenOrderBadge(order.id, badgeEl);
+
+    // Chat
     card.querySelector(".chatBtn").onclick = () => openChat(order);
 
+    // WhatsApp
     card.querySelector(".waBtn").onclick = () => {
       const phone = safePhone(client.phone);
       if (!phone) {
@@ -423,6 +609,7 @@ function render() {
       window.open(`https://wa.me/${phone}?text=${msg}`);
     };
 
+    // PDF
     card.querySelector(".exportBtn").onclick = async () => {
       try {
         await exportOrderPDFA4_PRO(order, db);
@@ -432,6 +619,7 @@ function render() {
       }
     };
 
+    // Status change
     const sel = card.querySelector(".statusSelect");
     sel.onchange = async () => {
       const newStatus = sel.value;
