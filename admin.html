@@ -224,17 +224,20 @@
   };
   const hash = location.hash.replace("#", "");
   if (hashMap[hash]) {
-    // Așteptăm ca admin-section-urile să fie vizibile (după auth)
-    const observer = new MutationObserver(() => {
-      const panel = document.getElementById(hashMap[hash]);
-      if (panel && panel.closest(".container")) {
-        activateTabById(hashMap[hash]);
-        observer.disconnect();
+    const targetPanel = hashMap[hash];
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      const tabsWrap = document.querySelector(".tabs-wrap");
+      if (tabsWrap && getComputedStyle(tabsWrap).display !== "none") {
+        activateTabById(targetPanel);
+        clearInterval(interval);
       }
-    });
-    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["style"] });
-    // Fallback după 1s
-    setTimeout(() => activateTabById(hashMap[hash]), 1000);
+      if (attempts >= 30) {
+        activateTabById(targetPanel);
+        clearInterval(interval);
+      }
+    }, 100);
   }
 </script>
 
