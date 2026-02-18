@@ -21,12 +21,24 @@
       </div>
     </div>
 
-    <div class="actions">
-      <!-- Admin clienți -->
-      <button id="btnAdmin" class="btn ghost" style="display:none;">Admin</button>
+    <div class="actions" id="topbarActions">
+      <!-- CLIENT -->
+      <button id="btnOrders" class="btn ghost nav-btn" style="display:none;">Comenzi</button>
+      <button id="btnPromos" class="btn ghost nav-btn" style="display:none; position:relative;">
+        Promoții
+        <span id="badgePromos" style="display:none;position:absolute;top:-6px;right:-6px;background:#ff5d5d;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:900;align-items:center;justify-content:center;z-index:2;"></span>
+      </button>
 
-      <!-- Admin comenzi -->
-      <button id="btnOrdersAdmin" class="btn ghost" style="display:none;">Comenzi</button>
+      <!-- ADMIN -->
+      <button id="btnAdminClients" class="btn ghost nav-btn" style="display:none;">Clienți</button>
+      <button id="btnAdminPromos" class="btn ghost nav-btn" style="display:none;">Promoții</button>
+      <button id="btnAdminCounties" class="btn ghost nav-btn" style="display:none;">Județe</button>
+
+      <!-- COMUN -->
+      <button id="btnMessages" class="btn ghost nav-btn" style="display:none; position:relative;">
+        Mesaje
+        <span id="badgeMessages" style="display:none;position:absolute;top:-6px;right:-6px;background:#ff5d5d;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:900;align-items:center;justify-content:center;z-index:2;"></span>
+      </button>
 
       <button id="btnLogout" class="btn ghost" hidden>Logout</button>
     </div>
