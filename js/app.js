@@ -84,6 +84,7 @@ const btnMessages      = document.getElementById("btnMessages");
 const btnAdminClients  = document.getElementById("btnAdminClients");
 const btnAdminPromos   = document.getElementById("btnAdminPromos");
 const btnAdminCounties = document.getElementById("btnAdminCounties");
+const btnReports       = document.getElementById("btnReports");
 const badgePromos      = document.getElementById("badgePromos");
 const badgeMessages    = document.getElementById("badgeMessages");
 
@@ -169,7 +170,7 @@ function setSessionText(user) {
   if (!user) {
     sessionInfo.textContent = "Neautentificat";
     btnLogout.hidden = true;
-    [btnOrders, btnPromos, btnMessages, btnAdminClients, btnAdminPromos, btnAdminCounties]
+    [btnOrders, btnPromos, btnMessages, btnAdminClients, btnAdminPromos, btnAdminCounties, btnReports]
       .forEach(b => { if (b) b.style.display = "none"; });
     __isAdminSession = false;
     stopBadgeListeners();
@@ -257,7 +258,10 @@ btnRegister?.addEventListener("click", async () => {
 });
 
 btnLogout?.addEventListener("click", async () => {
-  try { await signOut(auth); } catch (e) {}
+  try {
+    await clearCart();
+    await signOut(auth);
+  } catch (e) {}
 });
 
 btnBackToLogin?.addEventListener("click", async () => {
@@ -354,6 +358,7 @@ btnAdminClients?.addEventListener("click", () => openFrame("./admin.html#clients
 btnAdminPromos?.addEventListener("click", () => openFrame("./admin.html#promotions", "Admin — Promoții", ""));
 btnAdminCounties?.addEventListener("click", () => openFrame("./admin.html#counties", "Admin — Județe", "Zile livrare per județ"));
 btnMessages?.addEventListener("click", () => openFrame("./messages.html", "Mesaje", ""));
+btnReports?.addEventListener("click", () => openFrame("./reports.html", "Rapoarte", "Statistici și analize"));
 
 btnBackToCatalog?.addEventListener("click", () => {
   showOnly(screenCatalog);
@@ -376,12 +381,14 @@ async function routeAfterAuth(user) {
     if (btnAdminClients)  btnAdminClients.style.display  = "inline-block";
     if (btnAdminPromos)   btnAdminPromos.style.display   = "inline-block";
     if (btnAdminCounties) btnAdminCounties.style.display = "inline-block";
+    if (btnReports)       btnReports.style.display       = "inline-block";
   } else {
     if (btnOrders)        btnOrders.style.display        = "inline-block";
     if (btnPromos)        btnPromos.style.display        = "inline-block";
     if (btnAdminClients)  btnAdminClients.style.display  = "none";
     if (btnAdminPromos)   btnAdminPromos.style.display   = "none";
     if (btnAdminCounties) btnAdminCounties.style.display = "none";
+    if (btnReports)       btnReports.style.display       = "none";
   }
   if (btnMessages) btnMessages.style.display = "inline-block";
 
