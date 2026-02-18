@@ -135,14 +135,14 @@ onAuthStateChanged(auth, async (u) => {
 
   if (!u) {
     if (authCard) authCard.style.display = "block";
-    document.querySelectorAll(".admin-section").forEach(s => s.style.display = "none");
+    document.querySelectorAll(".admin-section:not(.tab-panel)").forEach(s => s.style.display = "none");
     const meEl = el("me"); if (meEl) meEl.textContent = "";
     return;
   }
 
-  // Sesiune activă: ascunde login, arată secțiunile
+  // Sesiune activă: ascunde login, arată secțiunile (NU tab-panel-urile — controlate de .active)
   if (authCard) authCard.style.display = "none";
-  document.querySelectorAll(".admin-section").forEach(s => s.style.display = "block");
+  document.querySelectorAll(".admin-section:not(.tab-panel)").forEach(s => s.style.display = "block");
   const meEl = el("me"); if (meEl) meEl.textContent = "";
 
   try {
@@ -159,7 +159,7 @@ onAuthStateChanged(auth, async (u) => {
     if (me?.role !== "admin") {
       showMsg("Nu ești admin. Setează: users/{uid}.role = 'admin'.", true);
       if (authCard) authCard.style.display = "block";
-      document.querySelectorAll(".admin-section").forEach(s => s.style.display = "none");
+      document.querySelectorAll(".admin-section:not(.tab-panel)").forEach(s => s.style.display = "none");
       return;
     }
 
