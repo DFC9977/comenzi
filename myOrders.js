@@ -47,7 +47,49 @@ function stripEmoji(s) {
 }
 function setNote(msg) { if (noteEl) noteEl.textContent = msg || ""; }
 
+// Badge listeners per comandă (mesaje necitite de la admin)
+const _badgeUnsubs = new Map();
+
+function stopAllBadgeListeners() {
+  _badgeUnsubs.forEach(unsub => { try { unsub(); } catch {} });
+  _badgeUnsubs.clear();
+}
+
+function listenChatBadge(orderId, badgeEl) {
+  if (_badgeUnsubs.has(orderId)) { try { _badgeUnsubs.get(orderId)(); } catch {} }
+  const q = query(collection(db, "orders", orderId, "messages"), orderBy("createdAt", "asc"));
+  const unsub = onSnapshot(q, (snap) => {
+    const me = auth.currentUser?.uid || "";
+    const unread = snap.docs.filter(d => {
+      const data = d.data();
+      return data.fromRole === "admin" && data.fromUid !== me && !data.readByClient;
+    }).length;
+    if (badgeEl) {
+      badgeEl.textContent = String(unread);
+      badgeEl.style.display = unread > 0 ? "inline-flex" : "none";
+    }
+  }, () => {});
+  _badgeUnsubs.set(orderId, unsub);
+}
+
+function renderOrderItems(items) {
+  if (!Array.isArray(items) || !items.length) return "";
+  const rows = items.map(it => {
+    const name = escapeHtml(String(it.name || it.productId || "—"));
+    const qty  = Number(it.qty || 0);
+    const unit = Number(it.unitPriceFinal ?? it.unit ?? 0);
+    const line = Number(it.lineTotal ?? (unit * qty));
+    return `<div class="order-item-row">
+        <span class="order-item-name">${name}</span>
+        <span class="order-item-qty">${qty} buc</span>
+        <span class="order-item-val">${formatMoney(line)} RON</span>
+      </div>`;
+  }).join("");
+  return `<div class="order-items">${rows}</div>`;
+}
+
 function render() {
+  stopAllBadgeListeners();
   const filter = filterEl.value;
   const items = ordersData
     .filter((o) => filter === "ALL" ? true : o.status === filter)
@@ -58,29 +100,49 @@ function render() {
     });
   listEl.innerHTML = "";
   if (!items.length) { listEl.innerHTML = "<div class='muted'>Nu există comenzi.</div>"; return; }
+
+  const statusColors = {
+    NEW: "#4da3ff", CONFIRMED: "#35d07f", SENT: "#f5a623",
+    DELIVERED: "#9fb0c3", CANCELED: "#ff5d5d"
+  };
+
   items.forEach((order) => {
     const card = document.createElement("div");
     card.className = "order-card";
-    
     const canEdit = order.status === "NEW";
-    
+    const statusColor = statusColors[order.status || "NEW"] || "#4da3ff";
+
     card.innerHTML = `
-      <div><b>Comanda #${order.orderNumber || "-"}</b></div>
-      <div class="muted">Status: <b>${escapeHtml(order.status || "-")}</b></div>
-      <div class="muted">Data: ${escapeHtml(formatDate(order.createdAt))}</div>
-      <div style="margin-top:6px;">Total: <b>${escapeHtml(formatMoney(order.total))} RON</b></div>
-      <div class="btns">
-        <button class="btnChat" type="button">Chat</button>
-        ${canEdit ? '<button class="btnEdit" type="button">Modifică comanda</button>' : ''}
+      <div class="order-card-header">
+        <div>
+          <div class="order-num">Comanda #${order.orderNumber || "—"}</div>
+          <div class="order-date">${escapeHtml(formatDate(order.createdAt))}</div>
+        </div>
+        <span class="order-status-badge" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}55;">
+          ${escapeHtml(order.status || "NEW")}
+        </span>
+      </div>
+      ${renderOrderItems(order.items)}
+      <div class="order-total">
+        <span class="order-total-label">Total comandă</span>
+        <span class="order-total-val">${formatMoney(order.total)} RON</span>
+      </div>
+      <div class="order-btns">
+        <button class="btnChat order-btn chat-btn" type="button" style="position:relative;">
+          💬 Chat
+          <span class="chatBadge" style="position:absolute;top:6px;right:8px;background:#ff5d5d;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:900;display:none;align-items:center;justify-content:center;"></span>
+        </button>
+        ${canEdit
+          ? `<button class="btnEdit order-btn" type="button">✏️ Modifică</button>`
+          : `<button class="order-btn" disabled style="opacity:.35;cursor:not-allowed;">✏️ Modifică</button>`
+        }
       </div>
     `;
-    
+
+    const badgeEl = card.querySelector(".chatBadge");
+    listenChatBadge(order.id, badgeEl);
     card.querySelector(".btnChat").onclick = () => openChat(order);
-    
-    if (canEdit) {
-      card.querySelector(".btnEdit").onclick = () => editOrder(order);
-    }
-    
+    if (canEdit) card.querySelector(".btnEdit").onclick = () => editOrder(order);
     listEl.appendChild(card);
   });
 }
