@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rapoarte — Gosbi Admin</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --line: #1e2d3d;
+      --text: #e8eef6;
+      --muted: #9fb0c3;
+      --primary: #4da3ff;
+      --ok: #35d07f;
+      --danger: #ff5d5d;
+      --warn: #f5a623;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: var(--bg); color: var(--text);
+      font-size: 15px; line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* TOPBAR */
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px;
+      background: rgba(11,15,20,.95);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+    }
+    .topbar-title { font-weight: 900; font-size: 17px; flex: 1; }
+
+    /* TABS */
+    .tabs-wrap {
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11,15,20,.7);
+      position: sticky; top: 49px; z-index: 40;
+    }
+    .tabs { display: flex; padding: 0 14px; min-width: max-content; }
+    .tab {
+      padding: 13px 16px; font-weight: 700; font-size: 14px;
+      color: var(--muted); border-bottom: 2px solid transparent;
+      cursor: pointer; white-space: nowrap; background: none;
+      border-top: none; border-left: none; border-right: none;
+      transition: color .15s, border-color .15s;
+    }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* CONTAINER */
+    .container { max-width: 720px; margin: 0 auto; padding: 16px 14px 60px; }
+
+    /* FILTRE PERIOD */
+    .period-bar {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 16px; align-items: center;
+    }
+    .period-btn {
+      padding: 8px 14px; border-radius: 20px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.05); color: var(--muted);
+      font-weight: 700; font-size: 13px; cursor: pointer;
+      transition: all .15s;
+    }
+    .period-btn.active {
+      background: rgba(77,163,255,.15);
+      border-color: rgba(77,163,255,.4);
+      color: var(--primary);
+    }
+    .date-inputs {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .date-inputs input {
+      padding: 9px 12px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06); color: #fff;
+      font-size: 14px; outline: none;
+    }
+    .date-inputs button {
+      padding: 9px 14px; border-radius: 10px; border: none;
+      background: var(--primary); color: #07111d;
+      font-weight: 800; font-size: 14px; cursor: pointer;
+    }
+
+    /* STAT CARDS */
+    .stat-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; margin-bottom: 16px;
+    }
+    @media (min-width: 500px) { .stat-grid { grid-template-columns: repeat(3, 1fr); } }
+    .stat-card {
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px; padding: 14px;
+    }
+    .stat-label { font-size: 11px; opacity: .5; text-transform: uppercase; letter-spacing: .5px; }
+    .stat-value { font-size: 24px; font-weight: 900; margin-top: 4px; }
+    .stat-sub { font-size: 12px; opacity: .55; margin-top: 2px; }
+
+    /* TABLE / LIST */
+    .report-list { display: flex; flex-direction: column; gap: 8px; }
+    .report-row {
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px; padding: 12px 14px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .report-row-rank {
+      font-size: 13px; font-weight: 900; opacity: .4;
+      min-width: 24px; text-align: center;
+    }
+    .report-row-info { flex: 1; min-width: 0; }
+    .report-row-name {
+      font-weight: 700; font-size: 15px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .report-row-sub { font-size: 12px; opacity: .55; margin-top: 2px; }
+    .report-row-value { text-align: right; flex-shrink: 0; }
+    .report-row-val-main { font-weight: 900; font-size: 16px; color: var(--ok); }
+    .report-row-val-sub { font-size: 12px; opacity: .55; margin-top: 1px; }
+
+    /* SECTION TITLE */
+    .section-title {
+      font-size: 11px; font-weight: 800; opacity: .45;
+      text-transform: uppercase; letter-spacing: .8px;
+      margin: 20px 0 10px;
+    }
+
+    .loading { opacity: .6; font-size: 14px; padding: 20px; text-align: center; }
+    .empty { opacity: .5; font-size: 14px; padding: 20px; text-align: center; }
+
+    /* TAB PANELS */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Bara progres vizuala */
+    .progress-bar {
+      height: 4px; border-radius: 2px;
+      background: rgba(255,255,255,.08);
+      margin-top: 6px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 2px;
+      background: linear-gradient(90deg, var(--primary), var(--ok));
+      transition: width .3s ease;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">📊 Rapoarte</div>
+  <div style="font-size:13px; opacity:.5;" id="periodLabel">—</div>
+</div>
+
+<div class="tabs-wrap">
+  <div class="tabs">
+    <button class="tab active" data-panel="panelOverview">📈 General</button>
+    <button class="tab" data-panel="panelProducts">📦 Produse</button>
+    <button class="tab" data-panel="panelClients">👥 Clienți</button>
+    <button class="tab" data-panel="panelAffiliates">🤝 Afiliați</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- FILTRE PERIOADĂ (comune tuturor taburilor) -->
+  <div style="margin-bottom:4px;">
+    <div class="period-bar" id="periodBar">
+      <button class="period-btn active" data-period="today">Azi</button>
+      <button class="period-btn" data-period="week">Săptămâna</button>
+      <button class="period-btn" data-period="month">Luna</button>
+      <button class="period-btn" data-period="custom">Interval</button>
+    </div>
+    <div class="date-inputs" id="customDates" style="display:none;">
+      <input type="date" id="dateFrom" />
+      <span style="opacity:.5;">→</span>
+      <input type="date" id="dateTo" />
+      <button id="btnApplyCustom">Aplică</button>
+    </div>
+  </div>
+
+  <!-- TAB: GENERAL -->
+  <div class="tab-panel active" id="panelOverview">
+    <div class="stat-grid" id="overviewStats">
+      <div class="loading" style="grid-column:1/-1;">Se încarcă…</div>
+    </div>
+    <div class="section-title">Ultimele comenzi</div>
+    <div class="report-list" id="recentOrders">
+      <div class="loading">Se încarcă…</div>
+    </div>
+  </div>
+
+  <!-- TAB: PRODUSE -->
+  <div class="tab-panel" id="panelProducts">
+    <div class="section-title">Top produse (după cantitate)</div>
+    <div class="report-list" id="productsList">
+      <div class="loading">Se încarcă…</div>
+    </div>
+  </div>
+
+  <!-- TAB: CLIENȚI -->
+  <div class="tab-panel" id="panelClients">
+    <div class="section-title">Top clienți (după valoare comenzi)</div>
+    <div class="report-list" id="clientsList">
+      <div class="loading">Se încarcă…</div>
+    </div>
+  </div>
+
+  <!-- TAB: AFILIAȚI -->
+  <div class="tab-panel" id="panelAffiliates">
+    <div class="section-title">Performanță afiliați</div>
+    <div class="report-list" id="affiliatesList">
+      <div class="loading">Se încarcă…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Tabs
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById(tab.dataset.panel)?.classList.add("active");
+    });
+  });
+</script>
+
+<script type="module" src="./js/reports.js"></script>
+</body>
+</html>
