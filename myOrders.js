@@ -47,7 +47,7 @@ function stripEmoji(s) {
 }
 function setNote(msg) { if (noteEl) noteEl.textContent = msg || ""; }
 
-// Badge listeners per comandă (mesaje necitite de la admin)
+// Badge listeners per comandă
 const _badgeUnsubs = new Map();
 
 function stopAllBadgeListeners() {
@@ -128,9 +128,9 @@ function render() {
         <span class="order-total-val">${formatMoney(order.total)} RON</span>
       </div>
       <div class="order-btns">
-        <button class="btnChat order-btn chat-btn" type="button" style="position:relative;">
+        <button class="btnChat order-btn" type="button" style="position:relative;overflow:visible;">
           💬 Chat
-          <span class="chatBadge" style="position:absolute;top:6px;right:8px;background:#ff5d5d;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:900;display:none;align-items:center;justify-content:center;"></span>
+          <span class="chatBadge" style="position:absolute;top:-8px;right:-8px;background:#ff5d5d;color:#fff;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:900;display:none;align-items:center;justify-content:center;z-index:2;box-shadow:0 0 0 2px #0b0f14;"></span>
         </button>
         ${canEdit
           ? `<button class="btnEdit order-btn" type="button">✏️ Modifică</button>`
