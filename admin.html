@@ -202,15 +202,40 @@
   const tabs = document.querySelectorAll(".tab");
   const panels = document.querySelectorAll(".tab-panel");
 
+  function activateTabById(panelId) {
+    tabs.forEach(t => t.classList.remove("active"));
+    panels.forEach(p => p.classList.remove("active"));
+    const panel = document.getElementById(panelId);
+    if (panel) panel.classList.add("active");
+    const tab = document.querySelector(`.tab[data-panel="${panelId}"]`);
+    if (tab) tab.classList.add("active");
+  }
+
   tabs.forEach(tab => {
-    tab.addEventListener("click", () => {
-      tabs.forEach(t => t.classList.remove("active"));
-      panels.forEach(p => p.classList.remove("active"));
-      tab.classList.add("active");
-      const panel = document.getElementById(tab.dataset.panel);
-      if (panel) panel.classList.add("active");
-    });
+    tab.addEventListener("click", () => activateTabById(tab.dataset.panel));
   });
+
+  // Detecție hash din URL: admin.html#promotions / #counties / #clients
+  const hashMap = {
+    clients:     "panelClients",
+    promotions:  "panelPromotions",
+    counties:    "panelCounties",
+    notifications: "panelNotifications",
+  };
+  const hash = location.hash.replace("#", "");
+  if (hashMap[hash]) {
+    // Așteptăm ca admin-section-urile să fie vizibile (după auth)
+    const observer = new MutationObserver(() => {
+      const panel = document.getElementById(hashMap[hash]);
+      if (panel && panel.closest(".container")) {
+        activateTabById(hashMap[hash]);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["style"] });
+    // Fallback după 1s
+    setTimeout(() => activateTabById(hashMap[hash]), 1000);
+  }
 </script>
 
 <script type="module" src="./admin.js"></script>
