@@ -353,7 +353,9 @@ btnMessages?.addEventListener("click", () => openFrame("./messages.html", "Mesaj
 
 btnBackToCatalog?.addEventListener("click", () => {
   showOnly(screenCatalog);
-}); -------------------- Routing -------------------- */
+});
+
+/* -------------------- Routing -------------------- */
 async function routeAfterAuth(user) {
   setSessionText(user);
 
