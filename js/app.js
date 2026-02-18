@@ -337,7 +337,11 @@ async function refreshCatalog() {
 function openFrame(src, title, subtitle) {
   showOnly(screenAdmin);
   const uid = auth.currentUser?.uid || "";
-  if (adminFrame) adminFrame.src = src + (src.includes("?") ? "&" : "?") + "v=" + Date.now() + "&uid=" + encodeURIComponent(uid);
+  // Hash-ul trebuie să fie DUPĂ query params: base?v=123#hash
+  const hashIdx = src.indexOf("#");
+  const base = hashIdx >= 0 ? src.slice(0, hashIdx) : src;
+  const hash = hashIdx >= 0 ? src.slice(hashIdx) : "";
+  if (adminFrame) adminFrame.src = base + (base.includes("?") ? "&" : "?") + "v=" + Date.now() + "&uid=" + encodeURIComponent(uid) + hash;
   const titleEl = document.getElementById("adminFrameTitle");
   const subtitleEl = document.getElementById("adminFrameSubtitle");
   if (titleEl) titleEl.textContent = title;
