@@ -315,10 +315,12 @@
   // Detectează ?tab=promotions din URL
   const _tabParam = new URLSearchParams(location.search).get("tab");
   if (_tabParam === "promotions") {
-    // Așteptăm DOM-ul să fie gata
     window.addEventListener("DOMContentLoaded", () => activateTab("panelPromos"));
-    // Fallback dacă DOMContentLoaded a trecut deja
     if (document.readyState !== "loading") activateTab("panelPromos");
+  }
+  if (_tabParam === "messages") {
+    window.addEventListener("DOMContentLoaded", () => activateTab("panelMessages"));
+    if (document.readyState !== "loading") activateTab("panelMessages");
   }
 </script>
 
