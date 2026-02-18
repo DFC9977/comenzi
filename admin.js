@@ -132,6 +132,11 @@ onAuthStateChanged(auth, async (u) => {
   $("active").innerHTML = "";
   showMsg("");
   document.querySelectorAll(".admin-section").forEach(s => s.style.display = u ? "block" : "none");
+
+  // Ascunde formularul de login dacă sesiunea e activă
+  const authCard = $("authCard");
+  if (authCard) authCard.style.display = u ? "none" : "block";
+
   if (!u) return;
 
   try {
@@ -140,6 +145,7 @@ onAuthStateChanged(auth, async (u) => {
     $("me").innerHTML = `<small style="opacity:.6">UID: ${u.uid}</small> | <b>role:</b> ${me?.role || "—"}`;
     if (me?.role !== "admin") {
       showMsg("Nu ești admin.", true);
+      if (authCard) authCard.style.display = "block";
       document.querySelectorAll(".admin-section").forEach(s => s.style.display = "none");
       return;
     }
