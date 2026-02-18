@@ -374,7 +374,7 @@ function loadMessagesPanel(uid) {
       _msgPanelUnsubs.push(msgUnsub);
 
       // Click deschide chat
-      card.onclick = () => openChat(order.id, order.orderNumber || "—");
+      card.onclick = () => openChat(order);
     });
   }, (err) => {
     console.error("loadMessagesPanel error:", err?.code, err?.message, err);
