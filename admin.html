@@ -1,36 +1,218 @@
 <!doctype html>
-<html>
+<html lang="ro">
 <head>
   <meta charset="utf-8" />
-  <title>Admin – Comenzi Gosbi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin — Gosbi</title>
   <style>
-    body{font-family:Arial;max-width:1100px;margin:20px auto;padding:0 12px}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    .card{border:1px solid #ddd;border-radius:10px;padding:12px;margin:10px 0}
-    button{padding:6px 10px;cursor:pointer}
-    input,select{padding:6px}
-    small{color:#666}
+    :root {
+      --bg: #0b0f14;
+      --card: #121924;
+      --line: #1e2d3d;
+      --text: #e8eef6;
+      --muted: #9fb0c3;
+      --primary: #4da3ff;
+      --ok: #35d07f;
+      --danger: #ff5d5d;
+      --warn: #f5a623;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(800px 400px at 20% 0%, rgba(77,163,255,.10), transparent 60%),
+                  radial-gradient(700px 400px at 80% 20%, rgba(53,208,127,.07), transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    /* ---- TOPBAR ---- */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(11,15,20,.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+      gap: 10px;
+    }
+    .topbar-brand { font-weight: 900; font-size: 18px; }
+    .topbar-brand span { color: var(--primary); }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .topbar-right button {
+      padding: 8px 14px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06); color: #fff;
+      font-weight: 700; font-size: 14px; cursor: pointer;
+    }
+
+    /* ---- TABS ---- */
+    .tabs-wrap {
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11,15,20,.6);
+      backdrop-filter: blur(8px);
+      position: sticky; top: 57px; z-index: 90;
+    }
+    .tabs {
+      display: flex; gap: 0;
+      padding: 0 16px;
+      min-width: max-content;
+    }
+    .tab {
+      padding: 14px 18px;
+      font-weight: 700; font-size: 14px;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+      background: none; border-top: none; border-left: none; border-right: none;
+    }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* ---- CONTAINER ---- */
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 16px 14px 60px;
+    }
+
+    /* ---- TAB PANELS ---- */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ---- AUTH CARD ---- */
+    .auth-card {
+      background: rgba(18,25,36,.95);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .auth-card input {
+      width: 100%; padding: 14px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06); color: #fff;
+      font-size: 16px; margin-bottom: 10px;
+    }
+    .auth-card input:focus { outline: none; border-color: var(--primary); }
+    .auth-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+    .btn-primary {
+      padding: 14px; border-radius: 12px; border: none;
+      background: var(--primary); color: #07111d;
+      font-weight: 900; font-size: 16px; cursor: pointer;
+    }
+    .btn-ghost {
+      padding: 14px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06); color: #fff;
+      font-weight: 700; font-size: 15px; cursor: pointer;
+    }
+    #me { font-size: 13px; opacity: .6; margin-top: 10px; }
+    #err { font-size: 14px; margin-top: 8px; min-height: 18px; }
+
+    /* ---- SECTION TITLES ---- */
+    .section-title {
+      font-size: 11px; font-weight: 800; opacity: .45;
+      text-transform: uppercase; letter-spacing: .8px;
+      margin: 20px 0 10px;
+    }
+
+    /* ---- ADMIN SECTIONS hidden until logged in ---- */
+    .admin-section { display: none; }
   </style>
 </head>
 <body>
-  <h1>Admin</h1>
-  <div id="authBox" class="card">
-    <div class="row">
-      <input id="phone" placeholder="Telefon (ex 0744...)" />
-      <input id="pass" type="password" placeholder="Parolă" />
-      <button id="btnLogin">Login</button>
-      <button id="btnLogout">Logout</button>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-brand">Gosbi <span>Admin</span></div>
+  <div class="topbar-right" id="me"></div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-wrap admin-section">
+  <div class="tabs">
+    <button class="tab active" data-panel="panelClients">👥 Clienți</button>
+    <button class="tab" data-panel="panelPromotions">📣 Promoții</button>
+    <button class="tab" data-panel="panelNotifications">📱 Notificări</button>
+    <button class="tab" data-panel="panelCounties">🗺 Județe</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- AUTH -->
+  <div class="auth-card">
+    <div style="font-weight:900; font-size:16px; margin-bottom:12px;">Autentificare Admin</div>
+    <input id="phone" type="tel" placeholder="Telefon (ex: 0744...)" autocomplete="username" />
+    <input id="pass" type="password" placeholder="Parolă" autocomplete="current-password" />
+    <div class="auth-btns">
+      <button class="btn-primary" id="btnLogin">Intră</button>
+      <button class="btn-ghost" id="btnLogout">Ieși</button>
     </div>
-    <div id="me"></div>
-    <div id="err" style="color:#c00;margin-top:8px"></div>
+    <div id="err"></div>
   </div>
 
-  <h2>Clienți în așteptare</h2>
-  <div id="pending"></div>
+  <!-- ===== TAB: CLIENȚI ===== -->
+  <div class="tab-panel active admin-section" id="panelClients">
 
-  <h2>Clienți activi</h2>
-  <div id="active"></div>
+    <div class="section-title">⏳ Clienți în așteptare</div>
+    <div id="pending"></div>
 
-  <script type="module" src="./admin.js"></script>
+    <div class="section-title" style="margin-top:28px;">✅ Clienți activi</div>
+    <div id="active"></div>
+
+  </div>
+
+  <!-- ===== TAB: PROMOȚII ===== -->
+  <div class="tab-panel admin-section" id="panelPromotions">
+    <div class="section-title">📣 Gestionare promoții</div>
+    <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
+      Promoțiile publicate apar la clienți într-un tab dedicat, cu notificare pentru promoții necitite.
+    </div>
+    <div id="promotionsContainer"></div>
+  </div>
+
+  <!-- ===== TAB: NOTIFICĂRI WhatsApp ===== -->
+  <div class="tab-panel admin-section" id="panelNotifications">
+    <div class="section-title">📱 Notificări livrare per județ</div>
+    <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
+      Selectează județul, editează mesajul și trimite WhatsApp fiecărui client activ din acel județ.
+    </div>
+    <div id="notificationsContainer"></div>
+  </div>
+
+  <!-- ===== TAB: JUDEȚE ===== -->
+  <div class="tab-panel admin-section" id="panelCounties">
+    <div class="section-title">🗺 Configurare județe & zile livrare</div>
+    <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
+      Setează ziua fixă de livrare per județ. Aceasta se aplică automat clienților din acel județ.
+    </div>
+    <div id="countiesContainer"></div>
+  </div>
+
+</div>
+
+<!-- TABS JS -->
+<script>
+  const tabs = document.querySelectorAll(".tab");
+  const panels = document.querySelectorAll(".tab-panel");
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      panels.forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      const panel = document.getElementById(tab.dataset.panel);
+      if (panel) panel.classList.add("active");
+    });
+  });
+</script>
+
+<script type="module" src="./admin.js"></script>
 </body>
 </html>
