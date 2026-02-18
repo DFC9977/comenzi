@@ -321,6 +321,12 @@ async function refreshCatalog() {
 btnAdmin?.addEventListener("click", () => {
   showOnly(screenAdmin);
   if (adminFrame) adminFrame.src = "./admin.html?v=" + Date.now();
+
+  // Update titlul pentru panoul admin
+  const titleEl = document.getElementById("adminFrameTitle");
+  const subtitleEl = document.getElementById("adminFrameSubtitle");
+  if (titleEl) titleEl.textContent = "Admin";
+  if (subtitleEl) subtitleEl.textContent = "Aprobări clienți / adaos / recomandări";
 });
 
 btnOrdersAdmin?.addEventListener("click", () => {
@@ -329,6 +335,12 @@ btnOrdersAdmin?.addEventListener("click", () => {
   const page = __isAdminSession ? "./orders-admin.html" : "./my-orders.html";
   const uid = auth.currentUser?.uid || "";
   if (adminFrame) adminFrame.src = page + "?v=" + Date.now() + "&uid=" + encodeURIComponent(uid);
+
+  // Update titlul secțiunii în funcție de rol
+  const titleEl = document.getElementById("adminFrameTitle");
+  const subtitleEl = document.getElementById("adminFrameSubtitle");
+  if (titleEl) titleEl.textContent = __isAdminSession ? "Admin Comenzi" : "Comenzile mele";
+  if (subtitleEl) subtitleEl.textContent = __isAdminSession ? "Gestionare comenzi clienți" : "";
 });
 
 btnBackToCatalog?.addEventListener("click", () => {
