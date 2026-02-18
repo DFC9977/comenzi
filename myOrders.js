@@ -12,6 +12,8 @@ import {
   onSnapshot,
   addDoc,
   doc,
+  updateDoc,
+  writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -171,7 +173,10 @@ function openChat(order) {
   document.body.classList.add("chat-open");
   const q = query(collection(db, "orders", order.id, "messages"), orderBy("createdAt", "asc"));
   _unsubChat = onSnapshot(q,
-    (snap) => { renderChat(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }))); },
+    (snap) => {
+      renderChat(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })));
+      markAdminMessagesRead(order.id, snap.docs);
+    },
     (err) => { console.error(err); chatBody.innerHTML = `<div class='muted'>Eroare: ${escapeHtml(err?.message || "")}</div>`; }
   );
 }
@@ -182,6 +187,21 @@ function closeChat() {
   document.body.classList.remove("chat-open");
   if (_unsubChat) { try { _unsubChat(); } catch {} }
   _unsubChat = null; _chatOrder = null;
+}
+
+async function markAdminMessagesRead(orderId, docs) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  const unread = docs.filter(d => {
+    const data = d.data();
+    return data.fromRole === "admin" && !data.readByClient;
+  });
+  if (!unread.length) return;
+  try {
+    const batch = writeBatch(db);
+    unread.forEach(d => batch.update(d.ref, { readByClient: true }));
+    await batch.commit();
+  } catch (e) { console.warn("markAdminMessagesRead:", e?.message); }
 }
 
 function renderChat(msgs) {
