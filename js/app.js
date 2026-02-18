@@ -15,7 +15,12 @@ import {
   doc,
   getDoc,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  onSnapshot,
+  orderBy,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 ;
 window.addEventListener("catalog:submitOrderRequested", async (event) => {
@@ -71,11 +76,21 @@ const screenAdmin = document.getElementById("screenAdmin");
 
 const sessionInfo = document.getElementById("sessionInfo");
 const btnLogout = document.getElementById("btnLogout");
-const btnAdmin = document.getElementById("btnAdmin");
-const btnOrdersAdmin = document.getElementById("btnOrdersAdmin");
 
-// session flags (used for routing buttons without touching HTML)
+// Butoane navigare
+const btnOrders        = document.getElementById("btnOrders");
+const btnPromos        = document.getElementById("btnPromos");
+const btnMessages      = document.getElementById("btnMessages");
+const btnAdminClients  = document.getElementById("btnAdminClients");
+const btnAdminPromos   = document.getElementById("btnAdminPromos");
+const btnAdminCounties = document.getElementById("btnAdminCounties");
+const badgePromos      = document.getElementById("badgePromos");
+const badgeMessages    = document.getElementById("badgeMessages");
+
+// session flags
 let __isAdminSession = false;
+let _unsubMsgBadge = null;
+let _unsubPromoBadge = null;
 
 const loginPhone = document.getElementById("loginPhone");
 const loginPass = document.getElementById("loginPass");
@@ -154,9 +169,10 @@ function setSessionText(user) {
   if (!user) {
     sessionInfo.textContent = "Neautentificat";
     btnLogout.hidden = true;
-    if (btnAdmin) btnAdmin.style.display = "none";
-    if (btnOrdersAdmin) btnOrdersAdmin.style.display = "none";
+    [btnOrders, btnPromos, btnMessages, btnAdminClients, btnAdminPromos, btnAdminCounties]
+      .forEach(b => { if (b) b.style.display = "none"; });
     __isAdminSession = false;
+    stopBadgeListeners();
     return;
   }
   const phone = (user.email || "").replace("@phone.local", "");
@@ -317,37 +333,27 @@ async function refreshCatalog() {
   updateCartUI();
 }
 
-/* -------------------- Admin screen in-app -------------------- */
-btnAdmin?.addEventListener("click", () => {
+/* -------------------- Nav buttons -------------------- */
+function openFrame(src, title, subtitle) {
   showOnly(screenAdmin);
-  if (adminFrame) adminFrame.src = "./admin.html?v=" + Date.now();
-
-  // Update titlul pentru panoul admin
-  const titleEl = document.getElementById("adminFrameTitle");
-  const subtitleEl = document.getElementById("adminFrameSubtitle");
-  if (titleEl) titleEl.textContent = "Admin";
-  if (subtitleEl) subtitleEl.textContent = "Aprobări clienți / adaos / recomandări";
-});
-
-btnOrdersAdmin?.addEventListener("click", () => {
-  showOnly(screenAdmin);
-  // admin: orders-admin.html | client: my-orders.html
-  const page = __isAdminSession ? "./orders-admin.html" : "./my-orders.html";
   const uid = auth.currentUser?.uid || "";
-  if (adminFrame) adminFrame.src = page + "?v=" + Date.now() + "&uid=" + encodeURIComponent(uid);
-
-  // Update titlul secțiunii în funcție de rol
+  if (adminFrame) adminFrame.src = src + (src.includes("?") ? "&" : "?") + "v=" + Date.now() + "&uid=" + encodeURIComponent(uid);
   const titleEl = document.getElementById("adminFrameTitle");
   const subtitleEl = document.getElementById("adminFrameSubtitle");
-  if (titleEl) titleEl.textContent = __isAdminSession ? "Admin Comenzi" : "Comenzile mele";
-  if (subtitleEl) subtitleEl.textContent = __isAdminSession ? "Gestionare comenzi clienți" : "";
-});
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle || "";
+}
+
+btnOrders?.addEventListener("click", () => openFrame("./my-orders.html", "Comenzile mele", ""));
+btnPromos?.addEventListener("click", () => openFrame("./my-orders.html?tab=promotions", "Promoții", ""));
+btnAdminClients?.addEventListener("click", () => openFrame("./admin.html#clients", "Admin — Clienți", "Aprobări / adaos / recomandări"));
+btnAdminPromos?.addEventListener("click", () => openFrame("./admin.html#promotions", "Admin — Promoții", ""));
+btnAdminCounties?.addEventListener("click", () => openFrame("./admin.html#counties", "Admin — Județe", "Zile livrare per județ"));
+btnMessages?.addEventListener("click", () => openFrame("./messages.html", "Mesaje", ""));
 
 btnBackToCatalog?.addEventListener("click", () => {
   showOnly(screenCatalog);
-});
-
-/* -------------------- Routing -------------------- */
+}); -------------------- Routing -------------------- */
 async function routeAfterAuth(user) {
   setSessionText(user);
 
@@ -356,9 +362,25 @@ async function routeAfterAuth(user) {
 
   const isAdmin = profile?.role === "admin";
   __isAdminSession = !!isAdmin;
-  if (btnAdmin) btnAdmin.style.display = isAdmin ? "inline-block" : "none";
-  // "Comenzi" is useful for clients too (their own orders).
-  if (btnOrdersAdmin) btnOrdersAdmin.style.display = "inline-block";
+
+  // Afișăm butoanele corecte per rol
+  if (isAdmin) {
+    if (btnOrders)        btnOrders.style.display        = "none";
+    if (btnPromos)        btnPromos.style.display        = "none";
+    if (btnAdminClients)  btnAdminClients.style.display  = "inline-block";
+    if (btnAdminPromos)   btnAdminPromos.style.display   = "inline-block";
+    if (btnAdminCounties) btnAdminCounties.style.display = "inline-block";
+  } else {
+    if (btnOrders)        btnOrders.style.display        = "inline-block";
+    if (btnPromos)        btnPromos.style.display        = "inline-block";
+    if (btnAdminClients)  btnAdminClients.style.display  = "none";
+    if (btnAdminPromos)   btnAdminPromos.style.display   = "none";
+    if (btnAdminCounties) btnAdminCounties.style.display = "none";
+  }
+  if (btnMessages) btnMessages.style.display = "inline-block";
+
+  // Pornim badge listeners
+  startBadgeListeners(user.uid, isAdmin);
 
   if (!isContactComplete(profile)) {
     fullName.value = profile?.contact?.fullName || "";
@@ -387,6 +409,81 @@ async function routeAfterAuth(user) {
     productsGrid.innerHTML = `<div class="note">Eroare la încărcarea produselor: ${escapeHtml(e?.message || "unknown")}</div>`;
   }
 }
+
+/* -------------------- Badge listeners -------------------- */
+function stopBadgeListeners() {
+  if (_unsubMsgBadge)   { try { _unsubMsgBadge(); }   catch {} _unsubMsgBadge = null; }
+  if (_unsubPromoBadge) { try { _unsubPromoBadge(); } catch {} _unsubPromoBadge = null; }
+}
+
+function startBadgeListeners(uid, isAdmin) {
+  stopBadgeListeners();
+  startMessagesBadge(uid, isAdmin);
+  if (!isAdmin) startPromosBadge(uid);
+}
+
+function startMessagesBadge(uid, isAdmin) {
+  const ordersQ = isAdmin
+    ? query(collection(db, "orders"), orderBy("updatedAt", "desc"))
+    : query(collection(db, "orders"), where("clientId", "==", uid));
+
+  const orderMsgUnsubs = new Map();
+  const orderCounts    = new Map();
+
+  function updateBadge() {
+    let total = 0;
+    orderCounts.forEach(v => total += v);
+    if (badgeMessages) {
+      badgeMessages.textContent = String(total);
+      badgeMessages.style.display = total > 0 ? "inline-flex" : "none";
+    }
+  }
+
+  _unsubMsgBadge = onSnapshot(ordersQ, (snap) => {
+    snap.docs.forEach(orderDoc => {
+      if (orderMsgUnsubs.has(orderDoc.id)) return;
+      const msgQ = query(collection(db, "orders", orderDoc.id, "messages"));
+      const unsub = onSnapshot(msgQ, (msgSnap) => {
+        const unread = msgSnap.docs.filter(d => {
+          const m = d.data();
+          if (isAdmin) return m.fromRole === "client" && !m.readByAdmin;
+          return m.fromRole === "admin" && !m.readByClient;
+        }).length;
+        orderCounts.set(orderDoc.id, unread);
+        updateBadge();
+      }, () => {});
+      orderMsgUnsubs.set(orderDoc.id, unsub);
+    });
+  }, () => {});
+}
+
+function startPromosBadge(uid) {
+  const promosQ = query(collection(db, "promotions"), where("active", "==", true));
+  let seenPromos = [];
+
+  // Citim seenPromotions o dată
+  getDoc(doc(db, "users", uid)).then(snap => {
+    seenPromos = snap.data()?.seenPromotions || [];
+
+    _unsubPromoBadge = onSnapshot(promosQ, (snap) => {
+      const unread = snap.docs.filter(d => !seenPromos.includes(d.id)).length;
+      if (badgePromos) {
+        badgePromos.textContent = String(unread);
+        badgePromos.style.display = unread > 0 ? "inline-flex" : "none";
+      }
+    }, () => {});
+  }).catch(() => {});
+}
+
+// Când clientul citește promoțiile (mesaj din iframe)
+window.addEventListener("message", (event) => {
+  if (event.data?.action === "promosRead") {
+    if (badgePromos) badgePromos.style.display = "none";
+  }
+  if (event.data?.action === "messagesRead") {
+    if (badgeMessages) badgeMessages.style.display = "none";
+  }
+});
 
 /* -------------------- Boot -------------------- */
 initCountyCity();
