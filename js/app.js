@@ -384,9 +384,17 @@ setSessionText(null);
 updateCartUI();
 
 // Listen for messages from iframe (my-orders.html) to show catalog
-window.addEventListener('message', (event) => {
+window.addEventListener('message', async (event) => {
   if (event.data?.action === 'showCatalog') {
     showOnly(screenCatalog);
+    // Force cart UI update and refresh product grid with quantities
+    updateCartUI();
+    // Small delay to ensure cart is loaded from localStorage
+    await new Promise(resolve => setTimeout(resolve, 50));
+    // Refresh catalog to show updated quantities
+    if (typeof refreshCatalog === 'function') {
+      await refreshCatalog();
+    }
   }
 });
 
