@@ -158,7 +158,7 @@
   </div>
 
   <!-- ===== TAB: CLIENȚI ===== -->
-  <div class="tab-panel active admin-section" id="panelClients">
+  <div class="tab-panel active" id="panelClients">
 
     <div class="section-title">⏳ Clienți în așteptare</div>
     <div id="pending"></div>
@@ -169,7 +169,7 @@
   </div>
 
   <!-- ===== TAB: PROMOȚII ===== -->
-  <div class="tab-panel admin-section" id="panelPromotions">
+  <div class="tab-panel" id="panelPromotions">
     <div class="section-title">📣 Gestionare promoții</div>
     <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
       Promoțiile publicate apar la clienți într-un tab dedicat, cu notificare pentru promoții necitite.
@@ -178,7 +178,7 @@
   </div>
 
   <!-- ===== TAB: NOTIFICĂRI WhatsApp ===== -->
-  <div class="tab-panel admin-section" id="panelNotifications">
+  <div class="tab-panel" id="panelNotifications">
     <div class="section-title">📱 Notificări livrare per județ</div>
     <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
       Selectează județul, editează mesajul și trimite WhatsApp fiecărui client activ din acel județ.
@@ -187,7 +187,7 @@
   </div>
 
   <!-- ===== TAB: JUDEȚE ===== -->
-  <div class="tab-panel admin-section" id="panelCounties">
+  <div class="tab-panel" id="panelCounties">
     <div class="section-title">🗺 Configurare județe & zile livrare</div>
     <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
       Setează ziua fixă de livrare per județ. Aceasta se aplică automat clienților din acel județ.
@@ -224,20 +224,17 @@
   };
   const hash = location.hash.replace("#", "");
   if (hashMap[hash]) {
-    const targetPanel = hashMap[hash];
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      const tabsWrap = document.querySelector(".tabs-wrap");
-      if (tabsWrap && getComputedStyle(tabsWrap).display !== "none") {
-        activateTabById(targetPanel);
-        clearInterval(interval);
+    // Așteptăm ca admin-section-urile să fie vizibile (după auth)
+    const observer = new MutationObserver(() => {
+      const panel = document.getElementById(hashMap[hash]);
+      if (panel && panel.closest(".container")) {
+        activateTabById(hashMap[hash]);
+        observer.disconnect();
       }
-      if (attempts >= 30) {
-        activateTabById(targetPanel);
-        clearInterval(interval);
-      }
-    }, 100);
+    });
+    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["style"] });
+    // Fallback după 1s
+    setTimeout(() => activateTabById(hashMap[hash]), 1000);
   }
 </script>
 
