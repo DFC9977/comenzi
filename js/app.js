@@ -357,7 +357,13 @@ btnPromos?.addEventListener("click", () => openFrame("./my-orders.html?tab=promo
 btnAdminClients?.addEventListener("click", () => openFrame("./admin.html#clients", "Admin — Clienți", "Aprobări / adaos / recomandări"));
 btnAdminPromos?.addEventListener("click", () => openFrame("./admin.html#promotions", "Admin — Promoții", ""));
 btnAdminCounties?.addEventListener("click", () => openFrame("./admin.html#counties", "Admin — Județe", "Zile livrare per județ"));
-btnMessages?.addEventListener("click", () => openFrame("./messages.html", "Mesaje", ""));
+btnMessages?.addEventListener("click", () => {
+  if (__isAdminSession) {
+    openFrame("./messages.html", "Mesaje", "");
+  } else {
+    openFrame("./my-orders.html?tab=messages", "Mesaje", "");
+  }
+});
 btnReports?.addEventListener("click", () => openFrame("./reports.html", "Rapoarte", "Statistici și analize"));
 
 btnBackToCatalog?.addEventListener("click", () => {
