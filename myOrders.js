@@ -301,7 +301,7 @@ function loadMessagesPanel(uid) {
   const ordersQ = query(
     collection(db, "orders"),
     where("clientId", "==", uid),
-    orderBy("updatedAt", "desc")
+    orderBy("createdAt", "desc")
   );
 
   const unsub = onSnapshot(ordersQ, async (snap) => {
