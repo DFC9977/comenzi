@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  getIdToken,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 import {
@@ -127,34 +128,51 @@ $("btnLogin").onclick = async () => {
 $("btnLogout").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, async (u) => {
-  $("me").textContent = "";
-  $("pending").innerHTML = "";
-  $("active").innerHTML = "";
+  const el = (id) => document.getElementById(id);
   showMsg("");
-  document.querySelectorAll(".admin-section").forEach(s => s.style.display = u ? "block" : "none");
 
-  // Ascunde formularul de login dacă sesiunea e activă
-  const authCard = $("authCard");
-  if (authCard) authCard.style.display = u ? "none" : "block";
+  const authCard = el("authCard");
 
-  if (!u) return;
+  if (!u) {
+    if (authCard) authCard.style.display = "block";
+    document.querySelectorAll(".admin-section").forEach(s => s.style.display = "none");
+    const meEl = el("me"); if (meEl) meEl.textContent = "";
+    return;
+  }
+
+  // Sesiune activă: ascunde login, arată secțiunile
+  if (authCard) authCard.style.display = "none";
+  document.querySelectorAll(".admin-section").forEach(s => s.style.display = "block");
+  const meEl = el("me"); if (meEl) meEl.textContent = "";
 
   try {
+    // Forțăm refresh token — critic în iframe unde auth poate fi lent
+    await getIdToken(u, true);
+
+    // Mică pauză pentru ca Firestore să accepte token-ul nou
+    await new Promise(r => setTimeout(r, 300));
+
     const meSnap = await getDoc(doc(db, "users", u.uid));
     const me = meSnap.exists() ? meSnap.data() : null;
-    $("me").innerHTML = `<small style="opacity:.6">UID: ${u.uid}</small> | <b>role:</b> ${me?.role || "—"}`;
+    if (meEl) meEl.innerHTML = `<small style="opacity:.6">UID: ${u.uid}</small> | <b>role:</b> ${me?.role || "—"}`;
+
     if (me?.role !== "admin") {
-      showMsg("Nu ești admin.", true);
+      showMsg("Nu ești admin. Setează: users/{uid}.role = 'admin'.", true);
       if (authCard) authCard.style.display = "block";
       document.querySelectorAll(".admin-section").forEach(s => s.style.display = "none");
       return;
     }
+
+    // Curățăm listele înainte de reload
+    const pendingEl = el("pending"); if (pendingEl) pendingEl.innerHTML = "";
+    const activeEl = el("active");  if (activeEl)  activeEl.innerHTML = "";
+
     await Promise.all([loadCategories(), loadProducts(), loadCounties()]);
     await loadUsers();
     await loadPromotions();
     initNotificationsSection();
   } catch (e) {
-    console.error(e);
+    console.error("admin init error:", e);
     showMsg(e?.message || String(e), true);
   }
 });
