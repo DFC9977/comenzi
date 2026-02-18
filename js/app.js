@@ -367,7 +367,7 @@ async function routeAfterAuth(user) {
 
   // Afișăm butoanele corecte per rol
   if (isAdmin) {
-    if (btnOrders)        btnOrders.style.display        = "none";
+    if (btnOrders)        btnOrders.style.display        = "inline-block"; // Comenzi admin → orders-admin.html
     if (btnPromos)        btnPromos.style.display        = "none";
     if (btnAdminClients)  btnAdminClients.style.display  = "inline-block";
     if (btnAdminPromos)   btnAdminPromos.style.display   = "inline-block";
