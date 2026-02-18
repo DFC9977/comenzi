@@ -282,11 +282,133 @@ if (_uidFromUrl) {
 }
 
 // onAuthStateChanged ca backup / confirmare
+// -------------------- MESSAGES PANEL --------------------
+
+let _msgPanelUnsubs = [];
+
+function stopMsgPanelListeners() {
+  _msgPanelUnsubs.forEach(u => { try { u(); } catch {} });
+  _msgPanelUnsubs = [];
+}
+
+function loadMessagesPanel(uid) {
+  const container = document.getElementById("messagesOrdersList");
+  if (!container) return;
+  container.innerHTML = '<div style="opacity:.6;padding:10px;">Se încarcă conversațiile…</div>';
+
+  stopMsgPanelListeners();
+
+  const ordersQ = query(
+    collection(db, "orders"),
+    where("clientId", "==", uid),
+    orderBy("updatedAt", "desc")
+  );
+
+  const unsub = onSnapshot(ordersQ, async (snap) => {
+    if (snap.empty) {
+      container.innerHTML = '<div style="opacity:.6;padding:10px;">Nu ai comenzi cu mesaje.</div>';
+      return;
+    }
+
+    container.innerHTML = "";
+    snap.docs.forEach(orderDoc => {
+      const order = { id: orderDoc.id, ...orderDoc.data() };
+      const msgQ = query(
+        collection(db, "orders", order.id, "messages"),
+        orderBy("createdAt", "desc")
+      );
+
+      const card = document.createElement("div");
+      card.style.cssText = `
+        border:1px solid rgba(255,255,255,.10);
+        background:rgba(255,255,255,.03);
+        border-radius:14px;
+        padding:14px;
+        margin-bottom:10px;
+        cursor:pointer;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+      `;
+
+      const left = document.createElement("div");
+      left.style.flex = "1";
+      left.innerHTML = `
+        <div style="font-weight:800;font-size:15px;">Comanda #${order.orderNumber || "—"}</div>
+        <div id="lastMsg_${order.id}" style="font-size:13px;opacity:.6;margin-top:3px;">…</div>
+      `;
+
+      const badge = document.createElement("span");
+      badge.style.cssText = `
+        display:none;
+        background:#ff5d5d;
+        color:#fff;
+        border-radius:50%;
+        width:20px;height:20px;
+        font-size:11px;font-weight:900;
+        align-items:center;justify-content:center;
+        flex-shrink:0;
+      `;
+
+      card.appendChild(left);
+      card.appendChild(badge);
+      container.appendChild(card);
+
+      // Listener mesaje
+      const msgUnsub = onSnapshot(msgQ, (msgSnap) => {
+        const msgs = msgSnap.docs.map(d => d.data());
+        const last = msgs[0];
+        const lastEl = document.getElementById("lastMsg_" + order.id);
+        if (lastEl && last) {
+          const who = last.fromRole === "admin" ? "Admin" : "Tu";
+          const text = String(last.text || "").slice(0, 50);
+          lastEl.textContent = `${who}: ${text}`;
+        }
+
+        const unread = msgs.filter(m => m.fromRole === "admin" && !m.readByClient).length;
+        badge.textContent = String(unread);
+        badge.style.display = unread > 0 ? "inline-flex" : "none";
+      }, () => {});
+
+      _msgPanelUnsubs.push(msgUnsub);
+
+      // Click deschide chat
+      card.onclick = () => openChat(order.id, order.orderNumber || "—");
+    });
+  }, () => {
+    container.innerHTML = '<div style="color:#ff5d5d;padding:10px;">Eroare la încărcarea mesajelor.</div>';
+  });
+
+  _msgPanelUnsubs.push(unsub);
+}
+
+// Activare tab Mesaje → încarcă conversațiile
+document.addEventListener("DOMContentLoaded", () => {
+  const tabMessages = document.getElementById("tabMessages");
+  if (tabMessages) {
+    tabMessages.addEventListener("click", () => {
+      const uid = auth.currentUser?.uid;
+      if (uid) loadMessagesPanel(uid);
+    });
+  }
+
+  // Dacă pagina se deschide direct pe tab=messages
+  const _tab = new URLSearchParams(location.search).get("tab");
+  if (_tab === "messages") {
+    const check = setInterval(() => {
+      const uid = auth.currentUser?.uid;
+      if (uid) { loadMessagesPanel(uid); clearInterval(check); }
+      }, 200);
+  }
+});
+
 onAuthStateChanged(auth, (user) => {
   if (user?.uid) {
     startWithUid(user.uid);
   } else if (!_uidFromUrl) {
     setNote("Trebuie să fii autentificat.");
     listEl.innerHTML = "";
+    stopMsgPanelListeners();
   }
 });
