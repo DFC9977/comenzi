@@ -298,18 +298,28 @@
 
 <!-- TABS JS -->
 <script>
+  function activateTab(panelId) {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    const panel = document.getElementById(panelId);
+    if (panel) panel.classList.add("active");
+    const tab = document.querySelector(`.tab[data-panel="${panelId}"]`);
+    if (tab) tab.classList.add("active");
+    if (panelId === "panelPromos") window.__markPromosRead?.();
+  }
+
   document.querySelectorAll(".tab").forEach(tab => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-      tab.classList.add("active");
-      document.getElementById(tab.dataset.panel)?.classList.add("active");
-      // Când deschidem promoțiile, marcăm ca văzute
-      if (tab.dataset.panel === "panelPromos") {
-        window.__markPromosRead?.();
-      }
-    });
+    tab.addEventListener("click", () => activateTab(tab.dataset.panel));
   });
+
+  // Detectează ?tab=promotions din URL
+  const _tabParam = new URLSearchParams(location.search).get("tab");
+  if (_tabParam === "promotions") {
+    // Așteptăm DOM-ul să fie gata
+    window.addEventListener("DOMContentLoaded", () => activateTab("panelPromos"));
+    // Fallback dacă DOMContentLoaded a trecut deja
+    if (document.readyState !== "loading") activateTab("panelPromos");
+  }
 </script>
 
 <script type="module" src="./myOrders.js"></script>
