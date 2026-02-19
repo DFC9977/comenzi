@@ -672,13 +672,51 @@ async function loadPromotions() {
   }
 }
 
+function tsToInputDate(ts) {
+  if (!ts?.toDate) return "";
+  const d = ts.toDate();
+  return d.toISOString().split("T")[0];
+}
+
+function calcPromoStatus(p) {
+  const now = new Date();
+  if (!p.active) return { label: "Inactivă", color: "#ff5d5d" };
+  const start = p.startDate?.toDate ? p.startDate.toDate() : null;
+  const end   = p.endDate?.toDate   ? p.endDate.toDate()   : null;
+  if (start && now < start) return { label: "Programată", color: "#f5a623" };
+  if (end   && now > end)   return { label: "Expirată",   color: "#9fb0c3" };
+  return { label: "Activă", color: "#35d07f" };
+}
+
+function formatPromoInterval(p) {
+  const start = p.startDate?.toDate ? p.startDate.toDate().toLocaleDateString("ro-RO") : null;
+  const end   = p.endDate?.toDate   ? p.endDate.toDate().toLocaleDateString("ro-RO")   : null;
+  if (start && end)  return `${start} → ${end}`;
+  if (start)         return `Din ${start}`;
+  if (end)           return `Până pe ${end}`;
+  return "";
+}
+
 function renderPromotions(container, promos) {
+  const inputStyle = `width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:14px;box-sizing:border-box;`;
+
   container.innerHTML = `
-    <div style="margin-bottom:16px;">
-      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text promoție nouă</label>
+    <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;margin-bottom:20px;">
+      <div style="font-size:12px;font-weight:800;opacity:.45;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;">Promoție nouă</div>
+      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text promoție</label>
       <textarea id="promoText" rows="3" placeholder="ex: 🎉 Reducere 10% până pe 31 martie!"
-        style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;resize:vertical;box-sizing:border-box;"></textarea>
-      <button id="btnAddPromo" style="width:100%;margin-top:10px;padding:14px;border-radius:12px;border:none;background:#4da3ff;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">
+        style="${inputStyle}resize:vertical;margin-bottom:10px;"></textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată start (opțional)</label>
+          <input id="promoStart" type="date" style="${inputStyle}" />
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată final (opțional)</label>
+          <input id="promoEnd" type="date" style="${inputStyle}" />
+        </div>
+      </div>
+      <button id="btnAddPromo" style="width:100%;padding:14px;border-radius:12px;border:none;background:#4da3ff;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">
         + Publică promoție
       </button>
     </div>
@@ -688,8 +726,20 @@ function renderPromotions(container, promos) {
   $("btnAddPromo").onclick = async () => {
     const text = $("promoText").value.trim();
     if (!text) return alert("Completează textul.");
-    await addDoc(collection(db, "promotions"), { text, active: true, createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid || "" });
+    const startVal = $("promoStart").value;
+    const endVal   = $("promoEnd").value;
+    const payload = {
+      text,
+      active: true,
+      createdAt: serverTimestamp(),
+      createdBy: auth.currentUser?.uid || "",
+      startDate: startVal ? new Date(startVal) : null,
+      endDate:   endVal   ? new Date(endVal)   : null,
+    };
+    await addDoc(collection(db, "promotions"), payload);
     $("promoText").value = "";
+    $("promoStart").value = "";
+    $("promoEnd").value = "";
     await loadPromotions();
   };
 
@@ -700,26 +750,102 @@ function renderPromotions(container, promos) {
   }
 
   promos.forEach(p => {
+    const status   = calcPromoStatus(p);
+    const interval = formatPromoInterval(p);
+    const when     = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("ro-RO") : "";
+
     const row = document.createElement("div");
     row.style.cssText = `border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);border-radius:14px;padding:14px;margin-bottom:10px;`;
-    const when = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("ro-RO") : "";
-    row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <div style="flex:1;">
-          <div style="font-size:15px;margin-bottom:6px;">${escapeHtml(p.text)}</div>
-          <div style="font-size:12px;opacity:.5;">${when} &nbsp;|&nbsp;
-            <span style="color:${p.active ? "#35d07f" : "#ff5d5d"};">${p.active ? "Activă" : "Inactivă"}</span>
+
+    // VIEW mode
+    const viewEl = document.createElement("div");
+    viewEl.className = "promo-view";
+    viewEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:15px;margin-bottom:6px;word-break:break-word;">${escapeHtml(p.text)}</div>
+          <div style="font-size:12px;opacity:.5;">
+            Creat: ${when}
+            ${interval ? `&nbsp;|&nbsp; 📅 ${escapeHtml(interval)}` : ""}
+            &nbsp;|&nbsp; <span style="color:${status.color};font-weight:700;">${status.label}</span>
           </div>
         </div>
-        <button class="togglePromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;">
-          ${p.active ? "Dezactivează" : "Activează"}
-        </button>
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btnEditPromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;">✏️ Editează</button>
+          <button class="btnTogglePromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;white-space:nowrap;">
+            ${p.active ? "Dezactivează" : "Activează"}
+          </button>
+          <button class="btnDeletePromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,93,93,.3);background:rgba(255,93,93,.08);color:#ff5d5d;cursor:pointer;font-size:13px;">🗑️</button>
+        </div>
       </div>
     `;
-    row.querySelector(".togglePromo").onclick = async () => {
+
+    // EDIT mode
+    const editEl = document.createElement("div");
+    editEl.className = "promo-edit";
+    editEl.style.display = "none";
+    editEl.innerHTML = `
+      <div style="font-size:12px;font-weight:800;opacity:.45;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Editează promoție</div>
+      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text</label>
+      <textarea class="editText" rows="3" style="${inputStyle}resize:vertical;margin-bottom:10px;">${escapeHtml(p.text)}</textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată start</label>
+          <input class="editStart" type="date" value="${tsToInputDate(p.startDate)}" style="${inputStyle}" />
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată final</label>
+          <input class="editEnd" type="date" value="${tsToInputDate(p.endDate)}" style="${inputStyle}" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btnSaveEdit" style="flex:1;padding:12px;border-radius:12px;border:none;background:#35d07f;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">💾 Salvează</button>
+        <button class="btnCancelEdit" style="padding:12px 20px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">Anulează</button>
+      </div>
+    `;
+
+    row.appendChild(viewEl);
+    row.appendChild(editEl);
+
+    // Toggle edit
+    viewEl.querySelector(".btnEditPromo").onclick = () => {
+      viewEl.style.display = "none";
+      editEl.style.display = "block";
+    };
+    editEl.querySelector(".btnCancelEdit").onclick = () => {
+      editEl.style.display = "none";
+      viewEl.style.display = "block";
+    };
+
+    // Save edit
+    editEl.querySelector(".btnSaveEdit").onclick = async () => {
+      const newText  = editEl.querySelector(".editText").value.trim();
+      if (!newText) return alert("Textul nu poate fi gol.");
+      const startVal = editEl.querySelector(".editStart").value;
+      const endVal   = editEl.querySelector(".editEnd").value;
+      await updateDoc(doc(db, "promotions", p.id), {
+        text:      newText,
+        startDate: startVal ? new Date(startVal) : null,
+        endDate:   endVal   ? new Date(endVal)   : null,
+        updatedAt: serverTimestamp(),
+      });
+      await loadPromotions();
+    };
+
+    // Toggle active
+    viewEl.querySelector(".btnTogglePromo").onclick = async () => {
       await updateDoc(doc(db, "promotions", p.id), { active: !p.active, updatedAt: serverTimestamp() });
       await loadPromotions();
     };
+
+    // Delete
+    viewEl.querySelector(".btnDeletePromo").onclick = async () => {
+      if (!confirm(`Ștergi promoția "${p.text}"?`)) return;
+      const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js");
+      await deleteDoc(doc(db, "promotions", p.id));
+      await loadPromotions();
+    };
+
     listEl.appendChild(row);
   });
 }
