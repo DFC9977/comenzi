@@ -6,6 +6,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { COUNTY_CITIES } from "./localities.js";
 
 const COUNTIES = [
   "Alba","Arad","Argeș","Bacău","Bihor","Bistrița-Năsăud","Botoșani","Brăila","Brașov","București",
@@ -13,18 +14,6 @@ const COUNTIES = [
   "Gorj","Harghita","Hunedoara","Ialomița","Iași","Ilfov","Maramureș","Mehedinți","Mureș","Neamț",
   "Olt","Prahova","Satu Mare","Sălaj","Sibiu","Suceava","Teleorman","Timiș","Tulcea","Vâlcea","Vaslui","Vrancea"
 ];
-
-// Demo listă (extinzi tu când vrei)
-const COUNTY_CITIES = {
-  "București": ["București"],
-  "Cluj": ["Cluj-Napoca","Turda","Dej"],
-  "Bihor": ["Oradea","Salonta","Marghita"],
-  "Satu Mare": ["Satu Mare","Carei","Negrești-Oaș"],
-  "Sălaj": ["Zalău","Șimleu Silvaniei","Jibou"],
-  "Timiș": ["Timișoara","Lugoj","Sânnicolau Mare"],
-  "Iași": ["Iași","Pașcani","Hârlău"],
-  "Constanța": ["Constanța","Mangalia","Medgidia"],
-};
 
 export function fillCountyOptions(countySelectEl) {
   if (!countySelectEl) return;

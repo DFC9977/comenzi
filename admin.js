@@ -1,6 +1,7 @@
 // admin.js (ROOT, lângă admin.html)
 import { auth, db } from "./js/firebase.js";
 import { normalizePhone, phoneToEmail } from "./js/auth.js";
+import { COUNTY_CITIES } from "./js/localities.js";
 
 import {
   signInWithEmailAndPassword,
@@ -389,8 +390,9 @@ function renderUserCard(uid, u, isPending) {
         </div>
         <div>
           <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Localitate</label>
-          <input type="text" class="contactCity" value="${escapeHtml(u.contact?.city || '')}"
+          <input type="text" class="contactCity" list="cityDL-${escapeHtml(uid)}" value="${escapeHtml(u.contact?.city || '')}"
             style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+          <datalist id="cityDL-${escapeHtml(uid)}"></datalist>
         </div>
       </div>
     </div>
@@ -401,6 +403,24 @@ function renderUserCard(uid, u, isPending) {
   secContact.querySelector(".contactFullName").addEventListener("input", (e) => {
     const nameDisplay = div.querySelector(".clientNameDisplay");
     if (nameDisplay) nameDisplay.firstChild.textContent = e.target.value || "(fără nume)";
+  });
+
+  // Populate city datalist on county change
+  const countySelect = secContact.querySelector(".contactCounty");
+  const cityDatalist = secContact.querySelector(`#cityDL-${uid}`);
+  function refreshCityDatalist(county) {
+    if (!cityDatalist) return;
+    cityDatalist.innerHTML = "";
+    for (const city of (COUNTY_CITIES[county] || [])) {
+      const opt = document.createElement("option");
+      opt.value = city;
+      cityDatalist.appendChild(opt);
+    }
+  }
+  refreshCityDatalist(countySelect.value);
+  countySelect.addEventListener("change", (e) => {
+    secContact.querySelector(".contactCity").value = "";
+    refreshCityDatalist(e.target.value);
   });
 
   // ===== SECȚIUNEA: Date generale =====
