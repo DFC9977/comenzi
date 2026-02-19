@@ -433,3 +433,21 @@ Requires a `serviceAccountKey.json` file (gitignored, never commit this).
 - **iframe navigation**: Secondary pages use `postMessage` to communicate with the parent. Don't try to navigate the parent window directly from iframe code — use `window.parent.postMessage(...)`.
 - **`escapeHtml` duplication**: Each module has its own copy. This is intentional (no shared utils module). Keep them consistent.
 - **County/city lists**: `js/profile.js` has a hardcoded partial list of cities per county (`COUNTY_CITIES`). If the city is not in the list, users can type it manually in the input.
+- **Counties Firestore IDs**: Document ID in `counties/` collection uses the exact county name as ID (e.g., `counties/Sălaj`). This ensures matching with `contact.county` from the client profile which also uses `COUNTIES_LIST` values.
+
+---
+
+## Recent Changes (2026-02-19)
+
+### Editable contact fields in admin client cards (`admin.js`)
+- Added **"Date contact"** section in `renderUserCard()` — first section shown in each client card
+- Fields: Telefon (readonly), Nume complet, Canisă/Felisă, Adresă, Județ (select), Localitate
+- County select uses the same `COUNTIES_LIST` as the client registration form
+- Saved via dot-notation keys (`"contact.fullName"`, etc.) in `updateDoc` to avoid overwriting `contact.completed`
+- Live update of header name as admin types
+
+### County name input → predefined dropdown (`admin.js` — Județe tab)
+- Replaced free-text `<input>` with `<select>` populated from `COUNTIES_LIST`
+- Already-configured counties are excluded from the dropdown (no duplicates)
+- Firestore document ID is now the canonical county name (e.g., `counties/Sălaj`) instead of a generated slug that stripped diacritics
+- Fixes delivery day lookup mismatch caused by typos like "Salaj" vs "Sălaj"
