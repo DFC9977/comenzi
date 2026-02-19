@@ -249,11 +249,18 @@ function renderCountiesSection() {
   if (!container) return;
   const DAYS = ["Luni", "Marți", "Miercuri", "Joi", "Vineri"];
 
+  // Județele deja configurate (pentru a le exclude din select)
+  const existingNames = new Set(ALL_COUNTIES.map(c => c.name.toLowerCase()));
+  const availableCounties = COUNTIES_LIST.filter(c => !existingNames.has(c.toLowerCase()));
+
   container.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px;">
       <div>
         <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Județ</label>
-        <input id="newCountyName" placeholder="ex: Satu Mare" style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+        <select id="newCountyName" style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:#0b111a;color:#fff;font-size:15px;">
+          <option value="">— alege județul —</option>
+          ${availableCounties.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+        </select>
       </div>
       <div>
         <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Zi livrare</label>
@@ -268,12 +275,11 @@ function renderCountiesSection() {
   `;
 
   $("btnAddCounty").onclick = async () => {
-    const name = $("newCountyName").value.trim();
+    const name = $("newCountyName").value;
     const day = $("newCountyDay").value;
-    if (!name) return alert("Completează județul.");
+    if (!name) return alert("Selectează județul.");
     if (!day) return alert("Selectează ziua.");
-    const id = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    await setDoc(doc(db, "counties", id), { name, deliveryDay: day, updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(doc(db, "counties", name), { name, deliveryDay: day, updatedAt: serverTimestamp() }, { merge: true });
     $("newCountyName").value = "";
     $("newCountyDay").value = "";
     await loadCounties();
