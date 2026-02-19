@@ -31,6 +31,13 @@ let ALL_USERS = [];
 let ALL_PRODUCTS = [];
 let ALL_COUNTIES = [];
 
+const COUNTIES_LIST = [
+  "Alba","Arad","Argeș","Bacău","Bihor","Bistrița-Năsăud","Botoșani","Brăila","Brașov","București",
+  "Buzău","Caraș-Severin","Călărași","Cluj","Constanța","Covasna","Dâmbovița","Dolj","Galați","Giurgiu",
+  "Gorj","Harghita","Hunedoara","Ialomița","Iași","Ilfov","Maramureș","Mehedinți","Mureș","Neamț",
+  "Olt","Prahova","Satu Mare","Sălaj","Sibiu","Suceava","Teleorman","Timiș","Tulcea","Vâlcea","Vaslui","Vrancea"
+];
+
 // -------------------- HELPERS --------------------
 
 function escapeHtml(s) {
@@ -340,6 +347,56 @@ function renderUserCard(uid, u, isPending) {
     </div>
   `;
 
+  // ===== SECȚIUNEA: Date contact =====
+  const secContact = makeSectionCard("Date contact");
+  secContact.innerHTML += `
+    <div style="display:grid;gap:10px;margin-top:4px;">
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Telefon</label>
+        <input type="tel" value="${escapeHtml(u.phone || '')}" readonly
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02);color:#9fb0c3;font-size:15px;box-sizing:border-box;opacity:.7;" />
+        <div style="font-size:11px;opacity:.4;margin-top:3px;">Telefonul este ID-ul de autentificare și nu poate fi modificat.</div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Nume complet</label>
+        <input type="text" class="contactFullName" value="${escapeHtml(u.contact?.fullName || '')}"
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Canisă / Felisă (opțional)</label>
+        <input type="text" class="contactKennel" value="${escapeHtml(u.contact?.kennel || '')}"
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Adresă completă</label>
+        <textarea class="contactAddress" rows="3"
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;resize:vertical;">${escapeHtml(u.contact?.address || '')}</textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Județ</label>
+          <select class="contactCounty"
+            style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:#0b111a;color:#fff;font-size:15px;">
+            <option value="">— selectează —</option>
+            ${COUNTIES_LIST.map(c => `<option value="${escapeHtml(c)}"${u.contact?.county === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Localitate</label>
+          <input type="text" class="contactCity" value="${escapeHtml(u.contact?.city || '')}"
+            style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+        </div>
+      </div>
+    </div>
+  `;
+  div.appendChild(secContact);
+
+  // Live update header when name changes
+  secContact.querySelector(".contactFullName").addEventListener("input", (e) => {
+    const nameDisplay = div.querySelector(".clientNameDisplay");
+    if (nameDisplay) nameDisplay.firstChild.textContent = e.target.value || "(fără nume)";
+  });
+
   // ===== SECȚIUNEA: Date generale =====
   const secGeneral = makeSectionCard("Date generale");
   secGeneral.innerHTML += `
@@ -566,13 +623,13 @@ function renderUserCard(uid, u, isPending) {
   if (isPending) {
     const btnApprove = makeBtn("✅ Aprobă & Activează", "#35d07f", "#07111d");
     actDiv.appendChild(btnApprove);
-    btnApprove.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, categoriesObj, productsObj, true);
+    btnApprove.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, secContact, categoriesObj, productsObj, true);
   } else {
     const btnSave = makeBtn("💾 Salvează modificările", "#4da3ff", "#07111d");
     const btnDeactivate = makeBtn("⏸ Trece în pending", "rgba(255,93,93,.12)", "#ff5d5d");
     actDiv.appendChild(btnSave);
     actDiv.appendChild(btnDeactivate);
-    btnSave.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, categoriesObj, productsObj, false);
+    btnSave.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, secContact, categoriesObj, productsObj, false);
     btnDeactivate.onclick = async () => {
       if (!confirm("Sigur?")) return;
       await updateDoc(doc(db, "users", uid), { status: "pending", updatedAt: serverTimestamp() });
@@ -616,7 +673,7 @@ function renderUserCard(uid, u, isPending) {
 
 // -------------------- SAVE USER --------------------
 
-async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, categoriesObj, productsObj, activate) {
+async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, secContact, categoriesObj, productsObj, activate) {
   const clientType   = secGeneral.querySelector(".clientType").value;
   const channel      = secGeneral.querySelector(".channel").value;
   const referrerUid  = secGeneral.querySelector(".referrer").value || "";
@@ -626,16 +683,20 @@ async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, categorie
   const deliveryFreq = Number(secDelivery.querySelector(".deliveryFreq").value || 1);
   const deliveryInt  = Number(secDelivery.querySelector(".deliveryInt").value || 7);
 
+  // Contact fields
+  const contactFullName = secContact.querySelector(".contactFullName").value.trim();
+  const contactKennel   = secContact.querySelector(".contactKennel").value.trim();
+  const contactAddress  = secContact.querySelector(".contactAddress").value.trim();
+  const contactCounty   = secContact.querySelector(".contactCounty").value;
+  const contactCity     = secContact.querySelector(".contactCity").value.trim();
+
   if (!clientType) return alert("Selectează tip client.");
   if (!channel) return alert("Selectează canalul.");
   if (channel === "recomandare_crescator" && !referrerUid) return alert("Selectează afiliatul.");
 
-  // Detectează ziua de livrare din județ
-  const userSnap = await getDoc(doc(db, "users", uid));
-  const userData = userSnap.exists() ? userSnap.data() : {};
-  const userCounty = userData?.contact?.county || "";
+  // Detectează ziua de livrare din județul selectat în secContact
   const countyData = ALL_COUNTIES.find(c =>
-    c.name.toLowerCase() === userCounty.toLowerCase() || c.id === userCounty.toLowerCase()
+    c.name.toLowerCase() === contactCounty.toLowerCase() || c.id === contactCounty.toLowerCase()
   );
   const deliveryDay = countyData?.deliveryDay || uData?.deliveryDay || "";
 
@@ -650,6 +711,12 @@ async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, categorie
     deliveryFrequency: deliveryFreq,
     deliveryIntervalDays: deliveryInt,
     deliveryStartDate: deliveryStart,
+    // Contact fields (dot-notation for nested update without overwriting contact.completed)
+    "contact.fullName": contactFullName,
+    "contact.kennel":   contactKennel,
+    "contact.address":  contactAddress,
+    "contact.county":   contactCounty,
+    "contact.city":     contactCity,
     updatedAt: serverTimestamp(),
   };
   if (activate) payload.status = "active";
