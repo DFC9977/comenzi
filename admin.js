@@ -1,5 +1,5 @@
 // admin.js (ROOT, lângă admin.html)
-import { auth, db } from "./js/firebase.js";
+import { auth, db, functions } from "./js/firebase.js";
 import { normalizePhone, phoneToEmail } from "./js/auth.js";
 import { COUNTY_CITIES } from "./js/localities.js";
 
@@ -9,6 +9,10 @@ import {
   onAuthStateChanged,
   getIdToken,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+import {
+  httpsCallable,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
 import {
   collection,
@@ -1071,27 +1075,40 @@ function renderPasswordResets(container, requests) {
     html += `<div class="section-title" style="margin-top:0;">⏳ În așteptare (${pending.length})</div>`;
     pending.forEach(req => {
       const when = req.createdAt?.toDate ? req.createdAt.toDate().toLocaleString('ro-RO') : '—';
-      const consoleUrl = `https://console.firebase.google.com/project/gosbiromania/authentication/users`;
       html += `
-        <div style="border:1px solid rgba(255,183,77,.25);background:rgba(255,183,77,.05);border-radius:14px;padding:14px;margin-bottom:10px;">
+        <div data-req-id="${escapeHtml(req.id)}" data-req-phone="${escapeHtml(req.phone || '')}"
+          style="border:1px solid rgba(255,183,77,.25);background:rgba(255,183,77,.05);border-radius:14px;padding:14px;margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
             <div>
               <div style="font-weight:900;font-size:15px;">${escapeHtml(req.phone || '—')}</div>
               <div style="font-size:12px;opacity:.55;margin-top:2px;">${escapeHtml(when)}</div>
-              <div style="font-size:12px;color:#4da3ff;margin-top:4px;">
-                Email Firebase: <code>${escapeHtml(req.email || req.phone + '@phone.local')}</code>
-              </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <a href="${consoleUrl}" target="_blank" rel="noopener"
-                style="padding:8px 12px;border-radius:10px;background:rgba(77,163,255,.15);border:1px solid rgba(77,163,255,.3);color:#4da3ff;font-weight:700;font-size:13px;text-decoration:none;white-space:nowrap;">
-                Firebase Console
-              </a>
-              <button data-id="${escapeHtml(req.id)}" class="btnResolveReset"
-                style="padding:8px 12px;border-radius:10px;background:rgba(53,208,127,.15);border:1px solid rgba(53,208,127,.3);color:#35d07f;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">
-                ✓ Marcat rezolvat
+              <button class="btnSetPass"
+                style="padding:8px 14px;border-radius:10px;background:rgba(77,163,255,.2);border:1px solid rgba(77,163,255,.4);color:#4da3ff;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">
+                🔑 Setează parola
+              </button>
+              <button class="btnResolveReset"
+                style="padding:8px 12px;border-radius:10px;background:rgba(53,208,127,.1);border:1px solid rgba(53,208,127,.25);color:#35d07f;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">
+                ✓ Rezolvat
               </button>
             </div>
+          </div>
+          <div class="resetPassForm" hidden style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:12px;opacity:.65;">Parolă nouă pentru <strong>${escapeHtml(req.phone || '—')}</strong>:</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input type="password" class="inputNewPass" placeholder="Parolă nouă (min. 6 car.)"
+                style="flex:1;min-width:160px;padding:8px 12px;border-radius:10px;background:#0b0f14;border:1px solid #223044;color:#e8eef6;font-size:14px;">
+              <button class="btnConfirmPass"
+                style="padding:8px 14px;border-radius:10px;background:#4da3ff;color:#0b0f14;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;">
+                Salvează
+              </button>
+              <button class="btnCancelPass"
+                style="padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#9fb0c3;font-weight:700;font-size:13px;cursor:pointer;">
+                Anulează
+              </button>
+            </div>
+            <div class="resetMsg" style="font-size:12px;display:none;"></div>
           </div>
         </div>`;
     });
@@ -1111,21 +1128,81 @@ function renderPasswordResets(container, requests) {
 
   container.innerHTML = html;
 
-  // Attach resolve handlers
-  container.querySelectorAll('.btnResolveReset').forEach(btn => {
+  const resetUserPassword = httpsCallable(functions, 'adminResetUserPassword');
+
+  // Buton "Seteaza parola"
+  container.querySelectorAll('.btnSetPass').forEach(btn => {
+    const card = btn.closest('[data-req-id]');
+    const form = card.querySelector('.resetPassForm');
+    btn.addEventListener('click', () => {
+      form.hidden = false;
+      card.querySelector('.inputNewPass').focus();
+    });
+  });
+
+  // Buton "Anuleaza"
+  container.querySelectorAll('.btnCancelPass').forEach(btn => {
+    const card = btn.closest('[data-req-id]');
+    btn.addEventListener('click', () => {
+      card.querySelector('.resetPassForm').hidden = true;
+      card.querySelector('.inputNewPass').value = '';
+      const msg = card.querySelector('.resetMsg');
+      msg.style.display = 'none';
+    });
+  });
+
+  // Buton "Salveaza" — apeleaza Cloud Function
+  container.querySelectorAll('.btnConfirmPass').forEach(btn => {
+    const card = btn.closest('[data-req-id]');
+    const reqId = card.dataset.reqId;
+    const phone = card.dataset.reqPhone;
+    const input = card.querySelector('.inputNewPass');
+    const msg = card.querySelector('.resetMsg');
+
     btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      if (!id) return;
+      const newPassword = input.value.trim();
+      if (newPassword.length < 6) {
+        msg.textContent = 'Parola trebuie să aibă minim 6 caractere.';
+        msg.style.color = '#ff5d5d';
+        msg.style.display = 'block';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Se procesează…';
+      msg.style.display = 'none';
+      try {
+        await resetUserPassword({ phone, newPassword, requestId: reqId });
+        msg.textContent = `✅ Parola a fost setată pentru ${phone}. Informează clientul!`;
+        msg.style.color = '#35d07f';
+        msg.style.display = 'block';
+        input.value = '';
+        btn.textContent = '✓ Gata';
+      } catch (e) {
+        msg.textContent = e?.message || 'Eroare la resetarea parolei.';
+        msg.style.color = '#ff5d5d';
+        msg.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Salvează';
+      }
+    });
+  });
+
+  // Buton "Rezolvat" (fara schimbare parola)
+  container.querySelectorAll('.btnResolveReset').forEach(btn => {
+    const card = btn.closest('[data-req-id]');
+    const reqId = card.dataset.reqId;
+    btn.addEventListener('click', async () => {
+      if (!reqId) return;
       btn.disabled = true;
       btn.textContent = 'Se salvează…';
       try {
-        await updateDoc(doc(db, 'passwordResetRequests', id), {
+        await updateDoc(doc(db, 'passwordResetRequests', reqId), {
           status: 'resolved',
           resolvedAt: serverTimestamp(),
         });
       } catch (e) {
         btn.disabled = false;
-        btn.textContent = '✓ Marcat rezolvat';
+        btn.textContent = '✓ Rezolvat';
         alert(e?.message || 'Eroare.');
       }
     });

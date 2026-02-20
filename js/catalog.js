@@ -55,6 +55,32 @@ function truncateText(text, maxChars) {
   return text.slice(0, maxChars).trim() + "...";
 }
 
+function normalizeProduct(doc) {
+  const data = doc.data ? (doc.data() || {}) : (doc || {});
+  const id = doc.id || data.id || "";
+
+  const basePrice = asNumber(
+    data.basePrice ?? data.priceGross ?? data.price ?? data.base_price ?? data.basePriceRon ?? 0
+  );
+
+  return {
+    id: String(id),
+    name: String(data.name || ""),
+    sku: String(data.sku || ""),
+    categoryId: String(data.categoryId || data.category || ""),
+    producerId: String(data.producerId || ""),
+    rangeId: String(data.rangeId || ""),
+    producer: String(data.producer || ""),
+    gama: String(data.gama || ""),
+    description: String(data.description || ""),
+    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
+    active: data.active !== undefined ? Boolean(data.active) : true,
+    promoEligible: data.promoEligible !== undefined ? Boolean(data.promoEligible) : false,
+    sortOrder: asNumber(data.sortOrder ?? 0),
+    basePrice
+  };
+}
+
 function ensureCSSOnce() {
   if (document.getElementById("catalog_css")) return;
   const style = document.createElement("style");
@@ -649,7 +675,7 @@ export async function loadProducts(db) {
   );
 
   const items = [];
-  snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+  snap.forEach((d) => items.push(normalizeProduct(d)));
   return items;
 }
 
