@@ -463,6 +463,9 @@ async function refreshCatalog() {
 
 /* -------------------- Nav buttons -------------------- */
 function openFrame(src, title, subtitle) {
+  // Abandonăm orice sesiune de editare comandă când navigăm departe de catalog
+  sessionStorage.removeItem('editingOrderId');
+  sessionStorage.removeItem('editingOrderNumber');
   showOnly(screenAdmin);
   const uid = auth.currentUser?.uid || "";
   // Hash-ul trebuie să fie DUPĂ query params: base?v=123#hash
@@ -686,14 +689,3 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-// Add to app.js at the end
-
-// Listen for postMessage from iframe (e.g., myOrders.js requesting catalog)
-window.addEventListener("message", (event) => {
-  if (event.data?.action === "showCatalog") {
-    const screenCatalog = document.getElementById("screenCatalog");
-    if (screenCatalog) {
-      showOnly(screenCatalog);
-    }
-  }
-});
