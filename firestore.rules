@@ -1,81 +1,114 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper: check if caller is admin
-    function isAdmin() {
-      return request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    // Helper: check if caller is authenticated
-    function isAuth() {
+    function signedIn() {
       return request.auth != null;
     }
-
-    // Users collection
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.admin == true
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+      );
+    }
+    /* =========================
+       USERS
+    ========================= */
     match /users/{uid} {
-      allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
-      allow create: if isAuth() && request.auth.uid == uid;
-      allow update: if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow get: if signedIn() && (
+        request.auth.uid == uid
+        || isAdmin()
+      );
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn() && (
+        request.auth.uid == uid
+        || isAdmin()
+      );
       allow delete: if isAdmin();
     }
-
-    // Orders collection
+    /* =========================
+       PRODUCTS
+    ========================= */
+    match /products/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    /* =========================
+       CATEGORIES
+    ========================= */
+    match /categories/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    /* =========================
+       PROMOTIONS
+    ========================= */
+    match /promotions/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+    /* =========================
+       COUNTIES
+    ========================= */
+    match /counties/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+    /* =========================
+       COUNTERS
+    ========================= */
+    match /counters/{id} {
+      allow read: if signedIn();
+      allow update: if signedIn() && id == "orders";
+      allow create: if isAdmin();
+      allow delete: if false;
+    }
+    /* =========================
+       ORDERS
+    ========================= */
     match /orders/{orderId} {
-      allow read: if isAuth() && (
-        resource.data.clientId == request.auth.uid || isAdmin()
-      );
-      allow create: if isAuth();
-      allow update: if isAuth() && (
-        resource.data.clientId == request.auth.uid || isAdmin()
-      );
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.status == "NEW";
+      allow get: if isAdmin()
+        || (signedIn() && resource.data.clientId == request.auth.uid);
+      allow list: if isAdmin()
+        || (signedIn() && request.query != null);
+      allow update: if (signedIn()
+          && resource.data.clientId == request.auth.uid
+          && resource.data.status == "NEW"
+          && request.resource.data.status == "NEW")
+        || isAdmin();
       allow delete: if isAdmin();
-
-      // Messages subcollection
-      match /messages/{msgId} {
-        allow read: if isAuth() && (
-          get(/databases/$(database)/documents/orders/$(orderId)).data.clientId == request.auth.uid || isAdmin()
-        );
-        allow create: if isAuth() && (
-          get(/databases/$(database)/documents/orders/$(orderId)).data.clientId == request.auth.uid || isAdmin()
-        );
-        allow update: if isAuth() && (
-          get(/databases/$(database)/documents/orders/$(orderId)).data.clientId == request.auth.uid || isAdmin()
-        );
-        allow delete: if isAdmin();
+      /* ===== messages subcollection ===== */
+      match /messages/{messageId} {
+        allow read: if isAdmin()
+          || (signedIn()
+              && get(/databases/$(database)/documents/orders/$(orderId)).data.clientId
+                 == request.auth.uid);
+        allow create: if (isAdmin()
+              || (signedIn()
+                  && get(/databases/$(database)/documents/orders/$(orderId)).data.clientId
+                     == request.auth.uid))
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.fromRole in ["admin", "client"];
+        allow update: if isAdmin()
+          || (signedIn()
+              && get(/databases/$(database)/documents/orders/$(orderId)).data.clientId
+                 == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readByClient"]));
+        allow delete: if false;
       }
     }
-
-    // Products — read by any authenticated user, write by admin only
-    match /products/{productId} {
-      allow read: if isAuth();
-      allow write: if isAdmin();
-    }
-
-    // Promotions — read by any authenticated user, write by admin only
-    match /promotions/{promoId} {
-      allow read: if isAuth();
-      allow write: if isAdmin();
-    }
-
-    // Counters — read/write by authenticated users (order number increment)
-    match /counters/{counterId} {
-      allow read, write: if isAuth();
-    }
-
-    // Counties — read by any authenticated user, write by admin only
-    match /counties/{countyId} {
-      allow read: if isAuth();
-      allow write: if isAdmin();
-    }
-
-    // Password reset requests — anyone can create (unauthenticated users too)
-    // Only admins can read/update/delete
+    /* =========================
+       PASSWORD RESET REQUESTS
+    ========================= */
     match /passwordResetRequests/{reqId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
-
   }
 }
