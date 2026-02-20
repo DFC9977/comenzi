@@ -17,3 +17,9 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GOSBIROMANIA }}
           channelId: live
           projectId: gosbiromania
+      - name: Deploy Firestore rules
+        run: |
+          npm install -g firebase-tools
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_GOSBIROMANIA }}' > /tmp/sa.json
+          GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json firebase deploy --only firestore:rules --project gosbiromania
+          rm /tmp/sa.json
