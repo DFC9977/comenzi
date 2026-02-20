@@ -140,6 +140,7 @@
     <button class="tab" data-panel="panelPromotions">📣 Promoții</button>
     <button class="tab" data-panel="panelNotifications">📱 Notificări</button>
     <button class="tab" data-panel="panelCounties">🗺 Județe</button>
+    <button class="tab" data-panel="panelPasswordResets">🔑 Resetare parole</button>
   </div>
 </div>
 
@@ -157,43 +158,62 @@
     <div id="err"></div>
   </div>
 
-  <!-- ===== TAB: CLIENȚI ===== -->
-  <div class="tab-panel active" id="panelClients">
+  <!-- Tab panels — wrapped in single admin-section so display:block from JS
+       doesn't override tab-panel CSS visibility on individual panels -->
+  <div class="admin-section" id="tabPanels">
 
-    <div class="section-title">⏳ Clienți în așteptare</div>
-    <div id="pending"></div>
-
-    <div class="section-title" style="margin-top:28px;">✅ Clienți activi</div>
-    <div id="active"></div>
-
-  </div>
-
-  <!-- ===== TAB: PROMOȚII ===== -->
-  <div class="tab-panel" id="panelPromotions">
-    <div class="section-title">📣 Gestionare promoții</div>
-    <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
-      Promoțiile publicate apar la clienți într-un tab dedicat, cu notificare pentru promoții necitite.
+    <!-- ===== TAB: CLIENȚI ===== -->
+    <div class="tab-panel active" id="panelClients">
+      <div class="section-title">⏳ Clienți în așteptare</div>
+      <div id="pending"></div>
+      <div class="section-title" style="margin-top:28px;">✅ Clienți activi</div>
+      <div id="active"></div>
     </div>
-    <div id="promotionsContainer"></div>
-  </div>
 
-  <!-- ===== TAB: NOTIFICĂRI WhatsApp ===== -->
-  <div class="tab-panel" id="panelNotifications">
-    <div class="section-title">📱 Notificări livrare per județ</div>
-    <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
-      Selectează județul, editează mesajul și trimite WhatsApp fiecărui client activ din acel județ.
+    <!-- ===== TAB: PROMOȚII ===== -->
+    <div class="tab-panel" id="panelPromotions">
+      <div class="section-title">📣 Gestionare promoții</div>
+      <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
+        Promoțiile publicate apar la clienți într-un tab dedicat, cu notificare pentru promoții necitite.
+      </div>
+      <div id="promotionsContainer"></div>
     </div>
-    <div id="notificationsContainer"></div>
-  </div>
 
-  <!-- ===== TAB: JUDEȚE ===== -->
-  <div class="tab-panel" id="panelCounties">
-    <div class="section-title">🗺 Configurare județe & zile livrare</div>
-    <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
-      Setează ziua fixă de livrare per județ. Aceasta se aplică automat clienților din acel județ.
+    <!-- ===== TAB: NOTIFICĂRI WhatsApp ===== -->
+    <div class="tab-panel" id="panelNotifications">
+      <div class="section-title">📱 Notificări livrare per județ</div>
+      <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
+        Selectează județul, editează mesajul și trimite WhatsApp fiecărui client activ din acel județ.
+      </div>
+      <div id="notificationsContainer"></div>
     </div>
-    <div id="countiesContainer"></div>
-  </div>
+
+    <!-- ===== TAB: JUDEȚE ===== -->
+    <div class="tab-panel" id="panelCounties">
+      <div class="section-title">🗺 Configurare județe & zile livrare</div>
+      <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
+        Setează ziua fixă de livrare per județ. Aceasta se aplică automat clienților din acel județ.
+      </div>
+      <div id="countiesContainer"></div>
+    </div>
+
+    <!-- ===== TAB: RESETARE PAROLE ===== -->
+    <div class="tab-panel" id="panelPasswordResets">
+      <div class="section-title">🔑 Cereri resetare parolă</div>
+      <div style="font-size:13px; opacity:.6; margin-bottom:14px;">
+        Clienții care au uitat parola apar mai jos. Resetează parola lor în
+        <a href="https://console.firebase.google.com/project/gosbiromania/authentication/users"
+           target="_blank" rel="noopener"
+           style="color:#4da3ff;">Firebase Console → Authentication</a>
+        (caută după <code style="font-size:12px;opacity:.8;">telefon@phone.local</code>),
+        apoi marchează cererea ca rezolvată.
+      </div>
+      <div id="passwordResetsContainer">
+        <div style="opacity:.5;font-size:13px;">Se încarcă…</div>
+      </div>
+    </div>
+
+  </div><!-- /admin-section tabPanels -->
 
 </div>
 

@@ -9,20 +9,23 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  updatePassword,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 import {
+  collection,
   doc,
   getDoc,
   setDoc,
+  addDoc,
   serverTimestamp,
-  collection,
   query,
   where,
   onSnapshot,
   orderBy,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-;
 window.addEventListener("catalog:submitOrderRequested", async (event) => {
   try {
     const user = auth.currentUser;
@@ -116,6 +119,25 @@ const btnRefreshProducts = document.getElementById("btnRefreshProducts");
 const btnBackToCatalog = document.getElementById("btnBackToCatalog");
 const adminFrame = document.getElementById("adminFrame");
 
+// Change password sheet
+const btnChangePass = document.getElementById("btnChangePass");
+const cpOverlay = document.getElementById("cpOverlay");
+const cpSheet = document.getElementById("cpSheet");
+const cpClose = document.getElementById("cpClose");
+const cpOld = document.getElementById("cpOld");
+const cpNew = document.getElementById("cpNew");
+const cpConf = document.getElementById("cpConf");
+const cpSave = document.getElementById("cpSave");
+const cpMsg = document.getElementById("cpMsg");
+
+// Forgot password
+const btnShowForgot = document.getElementById("btnShowForgot");
+const forgotSection = document.getElementById("forgotSection");
+const forgotPhone = document.getElementById("forgotPhone");
+const btnSendReset = document.getElementById("btnSendReset");
+const btnCancelReset = document.getElementById("btnCancelReset");
+const forgotMsg = document.getElementById("forgotMsg");
+
 /* -------------------- Helpers -------------------- */
 function showOnly(el) {
   const screens = [screenLoading, screenLogin, screenContactGate, screenCatalog, screenAdmin];
@@ -136,6 +158,108 @@ function clearNote(el) {
   el.textContent = "";
   el.classList.remove("ok", "err", "info");
 }
+
+/* -------------------- Change Password Sheet -------------------- */
+function openChangePass() {
+  if (cpOld) cpOld.value = '';
+  if (cpNew) cpNew.value = '';
+  if (cpConf) cpConf.value = '';
+  if (cpMsg) cpMsg.textContent = '';
+  if (cpOverlay) cpOverlay.style.display = 'block';
+  if (cpSheet) cpSheet.style.transform = 'translateY(0)';
+}
+
+function closeChangePass() {
+  if (cpOverlay) cpOverlay.style.display = 'none';
+  if (cpSheet) cpSheet.style.transform = 'translateY(110%)';
+}
+
+btnChangePass?.addEventListener('click', openChangePass);
+cpClose?.addEventListener('click', closeChangePass);
+cpOverlay?.addEventListener('click', closeChangePass);
+
+cpSave?.addEventListener('click', async () => {
+  if (cpMsg) cpMsg.textContent = '';
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const oldPass = String(cpOld?.value || '');
+  const newPass = String(cpNew?.value || '');
+  const confPass = String(cpConf?.value || '');
+
+  if (!oldPass) { if (cpMsg) { cpMsg.textContent = 'Introduceți parola curentă.'; cpMsg.style.color = '#ff5d5d'; } return; }
+  if (newPass.length < 6) { if (cpMsg) { cpMsg.textContent = 'Parola nouă trebuie să aibă minim 6 caractere.'; cpMsg.style.color = '#ff5d5d'; } return; }
+  if (newPass !== confPass) { if (cpMsg) { cpMsg.textContent = 'Parola nouă și confirmarea nu coincid.'; cpMsg.style.color = '#ff5d5d'; } return; }
+
+  try {
+    if (cpSave) cpSave.disabled = true;
+    const credential = EmailAuthProvider.credential(user.email, oldPass);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPass);
+    if (cpMsg) { cpMsg.textContent = 'Parola a fost schimbată cu succes!'; cpMsg.style.color = '#35d07f'; }
+    setTimeout(closeChangePass, 1500);
+  } catch (e) {
+    const msg = e?.code === 'auth/wrong-password' || e?.code === 'auth/invalid-credential'
+      ? 'Parola curentă este incorectă.'
+      : e?.message || 'Eroare la schimbarea parolei.';
+    if (cpMsg) { cpMsg.textContent = msg; cpMsg.style.color = '#ff5d5d'; }
+  } finally {
+    if (cpSave) cpSave.disabled = false;
+  }
+});
+
+/* -------------------- Forgot Password -------------------- */
+function showForgotForm() {
+  const loginGrid = screenLogin?.querySelector('.grid');
+  const loginRow = screenLogin?.querySelector('.row');
+  const loginSubtitle = screenLogin?.querySelector('.muted');
+  if (loginGrid) loginGrid.style.display = 'none';
+  if (loginRow) loginRow.style.display = 'none';
+  if (loginSubtitle) loginSubtitle.style.display = 'none';
+  if (btnShowForgot) btnShowForgot.style.display = 'none';
+  if (forgotSection) forgotSection.hidden = false;
+  clearNote(forgotMsg);
+  if (forgotPhone) forgotPhone.value = '';
+}
+
+function hideForgotForm() {
+  const loginGrid = screenLogin?.querySelector('.grid');
+  const loginRow = screenLogin?.querySelector('.row');
+  const loginSubtitle = screenLogin?.querySelector('.muted');
+  if (loginGrid) loginGrid.style.display = '';
+  if (loginRow) loginRow.style.display = '';
+  if (loginSubtitle) loginSubtitle.style.display = '';
+  if (btnShowForgot) btnShowForgot.style.display = '';
+  if (forgotSection) forgotSection.hidden = true;
+  clearNote(forgotMsg);
+}
+
+btnShowForgot?.addEventListener('click', showForgotForm);
+btnCancelReset?.addEventListener('click', hideForgotForm);
+
+btnSendReset?.addEventListener('click', async () => {
+  clearNote(forgotMsg);
+  const phone = normalizePhone(forgotPhone?.value || '');
+  if (!phone || phone.length < 9) {
+    showNote(forgotMsg, 'Introduceți un număr de telefon valid.', 'err');
+    return;
+  }
+  try {
+    if (btnSendReset) btnSendReset.disabled = true;
+    await addDoc(collection(db, 'passwordResetRequests'), {
+      phone,
+      email: `${phone}@phone.local`,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+    });
+    showNote(forgotMsg, 'Cererea a fost trimisă! Adminul te va contacta cu o parolă nouă.', 'ok');
+    if (forgotPhone) forgotPhone.value = '';
+  } catch (e) {
+    showNote(forgotMsg, e?.message || 'Eroare la trimiterea cererii.', 'err');
+  } finally {
+    if (btnSendReset) btnSendReset.disabled = false;
+  }
+});
 
 function normalizePhone(p) {
   return String(p || "").replace(/\s+/g, "").trim();
@@ -170,7 +294,7 @@ function setSessionText(user) {
   if (!user) {
     sessionInfo.textContent = "Neautentificat";
     btnLogout.hidden = true;
-    [btnOrders, btnPromos, btnMessages, btnAdminClients, btnAdminPromos, btnAdminCounties, btnReports]
+    [btnOrders, btnPromos, btnMessages, btnAdminClients, btnAdminPromos, btnAdminCounties, btnReports, btnChangePass]
       .forEach(b => { if (b) b.style.display = "none"; });
     __isAdminSession = false;
     stopBadgeListeners();
@@ -382,7 +506,7 @@ async function routeAfterAuth(user) {
 
   // Afișăm butoanele corecte per rol
   if (isAdmin) {
-    if (btnOrders)        btnOrders.style.display        = "inline-block"; // Comenzi admin → orders-admin.html
+    if (btnOrders)        btnOrders.style.display        = "inline-block";
     if (btnPromos)        btnPromos.style.display        = "none";
     if (btnAdminClients)  btnAdminClients.style.display  = "inline-block";
     if (btnAdminPromos)   btnAdminPromos.style.display   = "inline-block";
@@ -397,6 +521,8 @@ async function routeAfterAuth(user) {
     if (btnReports)       btnReports.style.display       = "none";
   }
   if (btnMessages) btnMessages.style.display = "inline-block";
+  // "Schimbă parola" doar pentru clienți (nu admini)
+  if (btnChangePass) btnChangePass.style.display = isAdmin ? "none" : "inline-block";
 
   // Pornim badge listeners
   startBadgeListeners(user.uid, isAdmin);
@@ -532,6 +658,7 @@ onAuthStateChanged(auth, async (user) => {
 
   if (!user) {
     setSessionText(null);
+    hideForgotForm();
     showOnly(screenLogin);
     updateCartUI();
     return;
