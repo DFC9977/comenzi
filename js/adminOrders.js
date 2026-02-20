@@ -1,9 +1,5 @@
 // js/adminOrders.js (FULL - status + chat + WhatsApp + PDF)
 
-console.log("adminOrders.js LOADED");
-console.warn("ADMINORDERS TOP LINE RUNS");
-window.__X = 123;
-
 import { auth, db } from "./firebase.js";
 import { exportOrderPDFA4_PRO } from "./pdf-export.js";
 
@@ -24,13 +20,6 @@ import {
   Timestamp,
   arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-/* DEBUG GLOBAL (pentru Console) */
-window.__AUTH = auth;
-window.__DB = db;
-
-console.warn("DEBUG: window.__AUTH =", window.__AUTH);
-console.warn("DEBUG: window.__AUTH.currentUser =", window.__AUTH?.currentUser);
 
 /* =========================
    DOM
@@ -696,8 +685,6 @@ if (refreshBtn) refreshBtn.addEventListener("click", render);
 setTopMessage("Se verifică autentificarea…");
 
 onAuthStateChanged(auth, async (user) => {
-  console.log("AUTH STATE:", user ? { uid: user.uid, phone: user.phoneNumber } : null);
-
   if (!user) {
     stopOrdersListener();
     setTopMessage("Nu ești logat în Firebase Auth. Reautentifică-te.");
