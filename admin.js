@@ -1,6 +1,7 @@
 // admin.js (ROOT, lângă admin.html)
 import { auth, db } from "./js/firebase.js";
 import { normalizePhone, phoneToEmail } from "./js/auth.js";
+import { COUNTY_CITIES } from "./js/localities.js";
 
 import {
   signInWithEmailAndPassword,
@@ -14,6 +15,7 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   doc,
   getDoc,
   setDoc,
@@ -30,6 +32,13 @@ let ALL_CATEGORIES = [];
 let ALL_USERS = [];
 let ALL_PRODUCTS = [];
 let ALL_COUNTIES = [];
+
+const COUNTIES_LIST = [
+  "Alba","Arad","Argeș","Bacău","Bihor","Bistrița-Năsăud","Botoșani","Brăila","Brașov","București",
+  "Buzău","Caraș-Severin","Călărași","Cluj","Constanța","Covasna","Dâmbovița","Dolj","Galați","Giurgiu",
+  "Gorj","Harghita","Hunedoara","Ialomița","Iași","Ilfov","Maramureș","Mehedinți","Mureș","Neamț",
+  "Olt","Prahova","Satu Mare","Sălaj","Sibiu","Suceava","Teleorman","Timiș","Tulcea","Vâlcea","Vaslui","Vrancea"
+];
 
 // -------------------- HELPERS --------------------
 
@@ -171,6 +180,7 @@ onAuthStateChanged(auth, async (u) => {
     await loadUsers();
     await loadPromotions();
     initNotificationsSection();
+    loadPasswordResetRequests();
   } catch (e) {
     console.error("admin init error:", e);
     showMsg(e?.message || String(e), true);
@@ -242,11 +252,18 @@ function renderCountiesSection() {
   if (!container) return;
   const DAYS = ["Luni", "Marți", "Miercuri", "Joi", "Vineri"];
 
+  // Județele deja configurate (pentru a le exclude din select)
+  const existingNames = new Set(ALL_COUNTIES.map(c => c.name.toLowerCase()));
+  const availableCounties = COUNTIES_LIST.filter(c => !existingNames.has(c.toLowerCase()));
+
   container.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px;">
       <div>
         <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Județ</label>
-        <input id="newCountyName" placeholder="ex: Satu Mare" style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+        <select id="newCountyName" style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:#0b111a;color:#fff;font-size:15px;">
+          <option value="">— alege județul —</option>
+          ${availableCounties.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+        </select>
       </div>
       <div>
         <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Zi livrare</label>
@@ -261,12 +278,11 @@ function renderCountiesSection() {
   `;
 
   $("btnAddCounty").onclick = async () => {
-    const name = $("newCountyName").value.trim();
+    const name = $("newCountyName").value;
     const day = $("newCountyDay").value;
-    if (!name) return alert("Completează județul.");
+    if (!name) return alert("Selectează județul.");
     if (!day) return alert("Selectează ziua.");
-    const id = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    await setDoc(doc(db, "counties", id), { name, deliveryDay: day, updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(doc(db, "counties", name), { name, deliveryDay: day, updatedAt: serverTimestamp() }, { merge: true });
     $("newCountyName").value = "";
     $("newCountyDay").value = "";
     await loadCounties();
@@ -339,6 +355,75 @@ function renderUserCard(uid, u, isPending) {
       </span>
     </div>
   `;
+
+  // ===== SECȚIUNEA: Date contact =====
+  const secContact = makeSectionCard("Date contact");
+  secContact.innerHTML += `
+    <div style="display:grid;gap:10px;margin-top:4px;">
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Telefon</label>
+        <input type="tel" value="${escapeHtml(u.phone || '')}" readonly
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02);color:#9fb0c3;font-size:15px;box-sizing:border-box;opacity:.7;" />
+        <div style="font-size:11px;opacity:.4;margin-top:3px;">Telefonul este ID-ul de autentificare și nu poate fi modificat.</div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Nume complet</label>
+        <input type="text" class="contactFullName" value="${escapeHtml(u.contact?.fullName || '')}"
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Canisă / Felisă (opțional)</label>
+        <input type="text" class="contactKennel" value="${escapeHtml(u.contact?.kennel || '')}"
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Adresă completă</label>
+        <textarea class="contactAddress" rows="3"
+          style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;resize:vertical;">${escapeHtml(u.contact?.address || '')}</textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Județ</label>
+          <select class="contactCounty"
+            style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:#0b111a;color:#fff;font-size:15px;">
+            <option value="">— selectează —</option>
+            ${COUNTIES_LIST.map(c => `<option value="${escapeHtml(c)}"${u.contact?.county === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Localitate</label>
+          <input type="text" class="contactCity" list="cityDL-${escapeHtml(uid)}" value="${escapeHtml(u.contact?.city || '')}"
+            style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;box-sizing:border-box;" />
+          <datalist id="cityDL-${escapeHtml(uid)}"></datalist>
+        </div>
+      </div>
+    </div>
+  `;
+  div.appendChild(secContact);
+
+  // Live update header when name changes
+  secContact.querySelector(".contactFullName").addEventListener("input", (e) => {
+    const nameDisplay = div.querySelector(".clientNameDisplay");
+    if (nameDisplay) nameDisplay.firstChild.textContent = e.target.value || "(fără nume)";
+  });
+
+  // Populate city datalist on county change
+  const countySelect = secContact.querySelector(".contactCounty");
+  const cityDatalist = secContact.querySelector(`#cityDL-${uid}`);
+  function refreshCityDatalist(county) {
+    if (!cityDatalist) return;
+    cityDatalist.innerHTML = "";
+    for (const city of (COUNTY_CITIES[county] || [])) {
+      const opt = document.createElement("option");
+      opt.value = city;
+      cityDatalist.appendChild(opt);
+    }
+  }
+  refreshCityDatalist(countySelect.value);
+  countySelect.addEventListener("change", (e) => {
+    secContact.querySelector(".contactCity").value = "";
+    refreshCityDatalist(e.target.value);
+  });
 
   // ===== SECȚIUNEA: Date generale =====
   const secGeneral = makeSectionCard("Date generale");
@@ -566,13 +651,13 @@ function renderUserCard(uid, u, isPending) {
   if (isPending) {
     const btnApprove = makeBtn("✅ Aprobă & Activează", "#35d07f", "#07111d");
     actDiv.appendChild(btnApprove);
-    btnApprove.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, categoriesObj, productsObj, true);
+    btnApprove.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, secContact, categoriesObj, productsObj, true);
   } else {
     const btnSave = makeBtn("💾 Salvează modificările", "#4da3ff", "#07111d");
     const btnDeactivate = makeBtn("⏸ Trece în pending", "rgba(255,93,93,.12)", "#ff5d5d");
     actDiv.appendChild(btnSave);
     actDiv.appendChild(btnDeactivate);
-    btnSave.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, categoriesObj, productsObj, false);
+    btnSave.onclick = () => saveUser(uid, u, secGeneral, secPrice, secDelivery, secContact, categoriesObj, productsObj, false);
     btnDeactivate.onclick = async () => {
       if (!confirm("Sigur?")) return;
       await updateDoc(doc(db, "users", uid), { status: "pending", updatedAt: serverTimestamp() });
@@ -616,7 +701,7 @@ function renderUserCard(uid, u, isPending) {
 
 // -------------------- SAVE USER --------------------
 
-async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, categoriesObj, productsObj, activate) {
+async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, secContact, categoriesObj, productsObj, activate) {
   const clientType   = secGeneral.querySelector(".clientType").value;
   const channel      = secGeneral.querySelector(".channel").value;
   const referrerUid  = secGeneral.querySelector(".referrer").value || "";
@@ -626,16 +711,20 @@ async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, categorie
   const deliveryFreq = Number(secDelivery.querySelector(".deliveryFreq").value || 1);
   const deliveryInt  = Number(secDelivery.querySelector(".deliveryInt").value || 7);
 
+  // Contact fields
+  const contactFullName = secContact.querySelector(".contactFullName").value.trim();
+  const contactKennel   = secContact.querySelector(".contactKennel").value.trim();
+  const contactAddress  = secContact.querySelector(".contactAddress").value.trim();
+  const contactCounty   = secContact.querySelector(".contactCounty").value;
+  const contactCity     = secContact.querySelector(".contactCity").value.trim();
+
   if (!clientType) return alert("Selectează tip client.");
   if (!channel) return alert("Selectează canalul.");
   if (channel === "recomandare_crescator" && !referrerUid) return alert("Selectează afiliatul.");
 
-  // Detectează ziua de livrare din județ
-  const userSnap = await getDoc(doc(db, "users", uid));
-  const userData = userSnap.exists() ? userSnap.data() : {};
-  const userCounty = userData?.contact?.county || "";
+  // Detectează ziua de livrare din județul selectat în secContact
   const countyData = ALL_COUNTIES.find(c =>
-    c.name.toLowerCase() === userCounty.toLowerCase() || c.id === userCounty.toLowerCase()
+    c.name.toLowerCase() === contactCounty.toLowerCase() || c.id === contactCounty.toLowerCase()
   );
   const deliveryDay = countyData?.deliveryDay || uData?.deliveryDay || "";
 
@@ -650,6 +739,12 @@ async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, categorie
     deliveryFrequency: deliveryFreq,
     deliveryIntervalDays: deliveryInt,
     deliveryStartDate: deliveryStart,
+    // Contact fields (dot-notation for nested update without overwriting contact.completed)
+    "contact.fullName": contactFullName,
+    "contact.kennel":   contactKennel,
+    "contact.address":  contactAddress,
+    "contact.county":   contactCounty,
+    "contact.city":     contactCity,
     updatedAt: serverTimestamp(),
   };
   if (activate) payload.status = "active";
@@ -672,13 +767,51 @@ async function loadPromotions() {
   }
 }
 
+function tsToInputDate(ts) {
+  if (!ts?.toDate) return "";
+  const d = ts.toDate();
+  return d.toISOString().split("T")[0];
+}
+
+function calcPromoStatus(p) {
+  const now = new Date();
+  if (!p.active) return { label: "Inactivă", color: "#ff5d5d" };
+  const start = p.startDate?.toDate ? p.startDate.toDate() : null;
+  const end   = p.endDate?.toDate   ? p.endDate.toDate()   : null;
+  if (start && now < start) return { label: "Programată", color: "#f5a623" };
+  if (end   && now > end)   return { label: "Expirată",   color: "#9fb0c3" };
+  return { label: "Activă", color: "#35d07f" };
+}
+
+function formatPromoInterval(p) {
+  const start = p.startDate?.toDate ? p.startDate.toDate().toLocaleDateString("ro-RO") : null;
+  const end   = p.endDate?.toDate   ? p.endDate.toDate().toLocaleDateString("ro-RO")   : null;
+  if (start && end)  return `${start} → ${end}`;
+  if (start)         return `Din ${start}`;
+  if (end)           return `Până pe ${end}`;
+  return "";
+}
+
 function renderPromotions(container, promos) {
+  const inputStyle = `width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:14px;box-sizing:border-box;`;
+
   container.innerHTML = `
-    <div style="margin-bottom:16px;">
-      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text promoție nouă</label>
+    <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;margin-bottom:20px;">
+      <div style="font-size:12px;font-weight:800;opacity:.45;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;">Promoție nouă</div>
+      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text promoție</label>
       <textarea id="promoText" rows="3" placeholder="ex: 🎉 Reducere 10% până pe 31 martie!"
-        style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;resize:vertical;box-sizing:border-box;"></textarea>
-      <button id="btnAddPromo" style="width:100%;margin-top:10px;padding:14px;border-radius:12px;border:none;background:#4da3ff;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">
+        style="${inputStyle}resize:vertical;margin-bottom:10px;"></textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată start (opțional)</label>
+          <input id="promoStart" type="date" style="${inputStyle}" />
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată final (opțional)</label>
+          <input id="promoEnd" type="date" style="${inputStyle}" />
+        </div>
+      </div>
+      <button id="btnAddPromo" style="width:100%;padding:14px;border-radius:12px;border:none;background:#4da3ff;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">
         + Publică promoție
       </button>
     </div>
@@ -688,8 +821,20 @@ function renderPromotions(container, promos) {
   $("btnAddPromo").onclick = async () => {
     const text = $("promoText").value.trim();
     if (!text) return alert("Completează textul.");
-    await addDoc(collection(db, "promotions"), { text, active: true, createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid || "" });
+    const startVal = $("promoStart").value;
+    const endVal   = $("promoEnd").value;
+    const payload = {
+      text,
+      active: true,
+      createdAt: serverTimestamp(),
+      createdBy: auth.currentUser?.uid || "",
+      startDate: startVal ? new Date(startVal) : null,
+      endDate:   endVal   ? new Date(endVal)   : null,
+    };
+    await addDoc(collection(db, "promotions"), payload);
     $("promoText").value = "";
+    $("promoStart").value = "";
+    $("promoEnd").value = "";
     await loadPromotions();
   };
 
@@ -700,26 +845,102 @@ function renderPromotions(container, promos) {
   }
 
   promos.forEach(p => {
+    const status   = calcPromoStatus(p);
+    const interval = formatPromoInterval(p);
+    const when     = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("ro-RO") : "";
+
     const row = document.createElement("div");
     row.style.cssText = `border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);border-radius:14px;padding:14px;margin-bottom:10px;`;
-    const when = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("ro-RO") : "";
-    row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <div style="flex:1;">
-          <div style="font-size:15px;margin-bottom:6px;">${escapeHtml(p.text)}</div>
-          <div style="font-size:12px;opacity:.5;">${when} &nbsp;|&nbsp;
-            <span style="color:${p.active ? "#35d07f" : "#ff5d5d"};">${p.active ? "Activă" : "Inactivă"}</span>
+
+    // VIEW mode
+    const viewEl = document.createElement("div");
+    viewEl.className = "promo-view";
+    viewEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:15px;margin-bottom:6px;word-break:break-word;">${escapeHtml(p.text)}</div>
+          <div style="font-size:12px;opacity:.5;">
+            Creat: ${when}
+            ${interval ? `&nbsp;|&nbsp; 📅 ${escapeHtml(interval)}` : ""}
+            &nbsp;|&nbsp; <span style="color:${status.color};font-weight:700;">${status.label}</span>
           </div>
         </div>
-        <button class="togglePromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;">
-          ${p.active ? "Dezactivează" : "Activează"}
-        </button>
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btnEditPromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;">✏️ Editează</button>
+          <button class="btnTogglePromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;white-space:nowrap;">
+            ${p.active ? "Dezactivează" : "Activează"}
+          </button>
+          <button class="btnDeletePromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,93,93,.3);background:rgba(255,93,93,.08);color:#ff5d5d;cursor:pointer;font-size:13px;">🗑️</button>
+        </div>
       </div>
     `;
-    row.querySelector(".togglePromo").onclick = async () => {
+
+    // EDIT mode
+    const editEl = document.createElement("div");
+    editEl.className = "promo-edit";
+    editEl.style.display = "none";
+    editEl.innerHTML = `
+      <div style="font-size:12px;font-weight:800;opacity:.45;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Editează promoție</div>
+      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text</label>
+      <textarea class="editText" rows="3" style="${inputStyle}resize:vertical;margin-bottom:10px;">${escapeHtml(p.text)}</textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată start</label>
+          <input class="editStart" type="date" value="${tsToInputDate(p.startDate)}" style="${inputStyle}" />
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată final</label>
+          <input class="editEnd" type="date" value="${tsToInputDate(p.endDate)}" style="${inputStyle}" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btnSaveEdit" style="flex:1;padding:12px;border-radius:12px;border:none;background:#35d07f;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">💾 Salvează</button>
+        <button class="btnCancelEdit" style="padding:12px 20px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">Anulează</button>
+      </div>
+    `;
+
+    row.appendChild(viewEl);
+    row.appendChild(editEl);
+
+    // Toggle edit
+    viewEl.querySelector(".btnEditPromo").onclick = () => {
+      viewEl.style.display = "none";
+      editEl.style.display = "block";
+    };
+    editEl.querySelector(".btnCancelEdit").onclick = () => {
+      editEl.style.display = "none";
+      viewEl.style.display = "block";
+    };
+
+    // Save edit
+    editEl.querySelector(".btnSaveEdit").onclick = async () => {
+      const newText  = editEl.querySelector(".editText").value.trim();
+      if (!newText) return alert("Textul nu poate fi gol.");
+      const startVal = editEl.querySelector(".editStart").value;
+      const endVal   = editEl.querySelector(".editEnd").value;
+      await updateDoc(doc(db, "promotions", p.id), {
+        text:      newText,
+        startDate: startVal ? new Date(startVal) : null,
+        endDate:   endVal   ? new Date(endVal)   : null,
+        updatedAt: serverTimestamp(),
+      });
+      await loadPromotions();
+    };
+
+    // Toggle active
+    viewEl.querySelector(".btnTogglePromo").onclick = async () => {
       await updateDoc(doc(db, "promotions", p.id), { active: !p.active, updatedAt: serverTimestamp() });
       await loadPromotions();
     };
+
+    // Delete
+    viewEl.querySelector(".btnDeletePromo").onclick = async () => {
+      if (!confirm(`Ștergi promoția "${p.text}"?`)) return;
+      const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js");
+      await deleteDoc(doc(db, "promotions", p.id));
+      await loadPromotions();
+    };
+
     listEl.appendChild(row);
   });
 }
@@ -810,4 +1031,103 @@ function initNotificationsSection() {
       listEl.innerHTML = `<div style="color:#ff5d5d;padding:10px;">Eroare: ${escapeHtml(e?.message || "")}</div>`;
     }
   };
+}
+
+// -------------------- RESETARE PAROLE --------------------
+
+let _unsubPasswordResets = null;
+
+function loadPasswordResetRequests() {
+  const container = $("passwordResetsContainer");
+  if (!container) return;
+
+  if (_unsubPasswordResets) { try { _unsubPasswordResets(); } catch {} }
+
+  const q = query(
+    collection(db, "passwordResetRequests"),
+    orderBy("createdAt", "desc")
+  );
+
+  _unsubPasswordResets = onSnapshot(q, (snap) => {
+    const requests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderPasswordResets(container, requests);
+  }, (err) => {
+    container.innerHTML = `<div style="color:#ff5d5d;font-size:13px;">Eroare: ${escapeHtml(err?.message || "")}</div>`;
+  });
+}
+
+function renderPasswordResets(container, requests) {
+  if (!requests.length) {
+    container.innerHTML = `<div style="opacity:.5;font-size:13px;padding:10px 0;">Nu există cereri de resetare.</div>`;
+    return;
+  }
+
+  const pending = requests.filter(r => r.status !== 'resolved');
+  const resolved = requests.filter(r => r.status === 'resolved');
+
+  let html = '';
+
+  if (pending.length) {
+    html += `<div class="section-title" style="margin-top:0;">⏳ În așteptare (${pending.length})</div>`;
+    pending.forEach(req => {
+      const when = req.createdAt?.toDate ? req.createdAt.toDate().toLocaleString('ro-RO') : '—';
+      const consoleUrl = `https://console.firebase.google.com/project/gosbiromania/authentication/users`;
+      html += `
+        <div style="border:1px solid rgba(255,183,77,.25);background:rgba(255,183,77,.05);border-radius:14px;padding:14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:900;font-size:15px;">${escapeHtml(req.phone || '—')}</div>
+              <div style="font-size:12px;opacity:.55;margin-top:2px;">${escapeHtml(when)}</div>
+              <div style="font-size:12px;color:#4da3ff;margin-top:4px;">
+                Email Firebase: <code>${escapeHtml(req.email || req.phone + '@phone.local')}</code>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <a href="${consoleUrl}" target="_blank" rel="noopener"
+                style="padding:8px 12px;border-radius:10px;background:rgba(77,163,255,.15);border:1px solid rgba(77,163,255,.3);color:#4da3ff;font-weight:700;font-size:13px;text-decoration:none;white-space:nowrap;">
+                Firebase Console
+              </a>
+              <button data-id="${escapeHtml(req.id)}" class="btnResolveReset"
+                style="padding:8px 12px;border-radius:10px;background:rgba(53,208,127,.15);border:1px solid rgba(53,208,127,.3);color:#35d07f;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">
+                ✓ Marcat rezolvat
+              </button>
+            </div>
+          </div>
+        </div>`;
+    });
+  }
+
+  if (resolved.length) {
+    html += `<div class="section-title" style="margin-top:20px;">✅ Rezolvate (${resolved.length})</div>`;
+    resolved.forEach(req => {
+      const when = req.resolvedAt?.toDate ? req.resolvedAt.toDate().toLocaleString('ro-RO') : '—';
+      html += `
+        <div style="border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);border-radius:14px;padding:12px 14px;margin-bottom:8px;opacity:.7;">
+          <div style="font-weight:700;font-size:14px;">${escapeHtml(req.phone || '—')}</div>
+          <div style="font-size:12px;opacity:.55;">Rezolvat: ${escapeHtml(when)}</div>
+        </div>`;
+    });
+  }
+
+  container.innerHTML = html;
+
+  // Attach resolve handlers
+  container.querySelectorAll('.btnResolveReset').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!id) return;
+      btn.disabled = true;
+      btn.textContent = 'Se salvează…';
+      try {
+        await updateDoc(doc(db, 'passwordResetRequests', id), {
+          status: 'resolved',
+          resolvedAt: serverTimestamp(),
+        });
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '✓ Marcat rezolvat';
+        alert(e?.message || 'Eroare.');
+      }
+    });
+  });
 }

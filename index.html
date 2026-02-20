@@ -41,6 +41,9 @@
         <span id="badgeMessages" style="display:none;position:absolute;top:-6px;right:-6px;background:#ff5d5d;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:900;align-items:center;justify-content:center;z-index:2;"></span>
       </button>
 
+      <!-- Schimbă parola (doar client logat) -->
+      <button id="btnChangePass" class="btn ghost" style="display:none;" title="Schimbă parola">🔑</button>
+
       <button id="btnLogout" class="btn ghost" hidden>Logout</button>
     </div>
   </header>
@@ -77,6 +80,31 @@
       </div>
 
       <div id="loginMsg" class="note" hidden></div>
+
+      <div style="text-align:center; margin-top:14px;">
+        <button id="btnShowForgot" type="button" style="background:none;border:none;color:#4da3ff;font-size:13px;cursor:pointer;padding:4px;text-decoration:underline;">
+          Am uitat parola
+        </button>
+      </div>
+
+      <!-- FORGOT PASSWORD FORM (hidden by default) -->
+      <div id="forgotSection" hidden style="margin-top:16px;border-top:1px solid rgba(255,255,255,.08);padding-top:16px;">
+        <h3 style="font-size:15px;margin-bottom:6px;">Resetare parolă</h3>
+        <p class="muted" style="font-size:13px;margin-bottom:12px;">
+          Introdu numărul tău de telefon. Adminul va primi cererea și te va contacta cu o parolă nouă.
+        </p>
+        <div class="grid">
+          <label class="field">
+            <span>Telefon</span>
+            <input id="forgotPhone" type="tel" inputmode="tel" placeholder="07xxxxxxxx" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="btnSendReset" class="btn primary">Trimite cererea</button>
+          <button id="btnCancelReset" class="btn">Înapoi</button>
+        </div>
+        <div id="forgotMsg" class="note" hidden></div>
+      </div>
     </section>
 
     <!-- CONTACT GATE -->
@@ -162,14 +190,42 @@
     <span class="muted">v1 • Firebase Spark • GitHub Pages</span>
   </footer>
 
+  <!-- CHANGE PASSWORD SHEET -->
+  <div id="cpOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;"></div>
+  <div id="cpSheet" style="
+    position:fixed;left:0;right:0;bottom:0;
+    transform:translateY(110%);transition:transform .22s ease;
+    z-index:9999;background:#0d1117;
+    border-top:1px solid rgba(255,255,255,.12);
+    border-radius:16px 16px 0 0;
+    padding:20px;max-width:500px;margin:0 auto;
+  ">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-weight:900;font-size:16px;">🔑 Schimbă parola</div>
+      <button id="cpClose" type="button" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:10px;padding:6px 12px;cursor:pointer;font-weight:700;">✕</button>
+    </div>
+    <div style="display:grid;gap:10px;margin-bottom:14px;">
+      <input id="cpOld" type="password" placeholder="Parola curentă"
+        style="padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;" />
+      <input id="cpNew" type="password" placeholder="Parola nouă (min 6 caractere)"
+        style="padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;" />
+      <input id="cpConf" type="password" placeholder="Confirmă parola nouă"
+        style="padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:15px;" />
+    </div>
+    <button id="cpSave" type="button" style="width:100%;padding:15px;border-radius:14px;border:none;background:#4da3ff;color:#07111d;font-weight:900;font-size:16px;cursor:pointer;">
+      Salvează parola
+    </button>
+    <div id="cpMsg" style="margin-top:10px;font-size:14px;min-height:18px;"></div>
+  </div>
+
   <!-- IMPORTANT:
        - bump APP_VER când vrei să fii sigur că browserul ia JS nou
        - ex: APP_VER = 41, 42, 43...
   -->
   <script>
-    window.APP_VER = 41;
+    window.APP_VER = 42;
   </script>
-  <script type="module" src="./js/app.js?v=41"></script>
+  <script type="module" src="./js/app.js?v=42"></script>
 
   <!-- SERVICE WORKER CONTROL (dev/prod friendly) -->
   <script>

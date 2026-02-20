@@ -1,201 +1,472 @@
-# CLAUDE.md — Gosbi Professional Comenzi
-
-This document provides context for AI assistants working in this repository.
-
----
+# CLAUDE.md — Gosbi Comenzi
 
 ## Project Overview
 
-**Gosbi-professional-comenzi** is a Romanian-language B2B order management web application (PWA) for the Gosbi pet food brand. It allows clients to browse products, place orders, and communicate with admins. Admins manage clients, promotions, delivery schedules, and orders.
+**Gosbi Comenzi** is a Romanian-language order management web application for a pet food distributor (Gosbi brand). It is a static site hosted on Firebase Hosting with Firebase Firestore as the backend.
 
-- **Live site**: `gosbiromania.web.app` (Firebase Hosting, project ID: `gosbiromania`)
-- **Language of UI/content**: Romanian (ro-RO)
-- **Architecture**: Vanilla JS ES6 modules + Firebase backend — no build step, no bundler
-
----
-
-## Directory Structure
-
-```
-/
-├── index.html            # Main client-facing shell (catalog, cart, login, profile)
-├── admin.html            # Admin dashboard shell
-├── my-orders.html        # Client order history page
-├── catalog.html          # Legacy/standalone catalog page
-├── messages.html         # Messaging interface (admin ↔ client)
-├── reports.html          # Admin reports page
-├── orders-admin.html     # Lightweight order management page
-├── styles.css            # Global stylesheet (CSS custom properties, dark theme)
-├── sw.js                 # Service Worker (network-first, no-store for JS/CSS/HTML)
-├── admin.js              # Root-level admin controller script
-├── myOrders.js           # Root-level client orders script
-├── upload.js             # Utility: upload products to Firestore
-├── upload-from-url.js    # Utility: import products from URL
-├── firebase.json         # Firebase Hosting config (public: ".", no build)
-├── .firebaserc           # Firebase project: gosbiromania
-├── package.json          # Minimal: axios, firebase-admin (for server utilities only)
-├── .github/
-│   └── workflows/
-│       └── firebase-hosting-pull-request.yml  # CI: preview deploy on PR
-└── js/                   # ES6 module library (imported by HTML pages)
-    ├── config.js         # Firebase client SDK configuration object
-    ├── firebase.js       # Initializes Firebase app, auth, and db exports
-    ├── app.js            # Main application logic: auth state, screen routing
-    ├── auth.js           # Phone-based auth helpers (phone→email mapping)
-    ├── profile.js        # User profile: county/city, contact completeness
-    ├── catalog.js        # Product catalog: load, filter, render products
-    ├── cart.js           # Shopping cart: add/remove/get items, Firestore sync
-    ├── orders.js         # Order submission with Firestore transactions
-    ├── adminOrders.js    # Admin order viewing and management
-    ├── clientPromos.js   # Promotion display for clients
-    ├── clientDelivery.js # Delivery date/schedule logic for clients
-    ├── messages.js       # Real-time messaging (Firestore onSnapshot)
-    ├── reports.js        # Admin reporting and data aggregation
-    ├── pdf-export.js     # PDF generation for orders/reports
-    └── auth.js           # (see above)
-```
+- **Project name**: Gosbi-professional-comenzi
+- **Firebase project**: `gosbiromania`
+- **Firebase Hosting site**: `gosbiromania`
+- **UI language**: Romanian
 
 ---
 
-## Technology Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Vanilla JavaScript (ES6 modules), HTML5, CSS3 |
-| Backend/DB | Firebase Firestore (real-time, NoSQL) |
-| Auth | Firebase Authentication (email/password — phone numbers stored as `{phone}@phone.local`) |
+| Frontend | Vanilla JavaScript (ES modules), HTML5, CSS3 |
+| Database | Firebase Firestore (NoSQL) |
+| Auth | Firebase Auth (email/password, phone-to-email scheme) |
 | Hosting | Firebase Hosting |
-| CI/CD | GitHub Actions → Firebase preview on PR |
-| PWA | Service Worker (`sw.js`) with network-first strategy |
-| PDF | Client-side PDF generation via `pdf-export.js` |
-| Dependencies | `axios` (HTTP), `firebase-admin` (server-side upload utilities only) |
+| CI/CD | GitHub Actions (preview deploys on PRs) |
+| Firebase SDK | 10.12.5 loaded from `gstatic.com` CDN |
+| Node deps | `axios`, `firebase-admin` (utility scripts only) |
 
-**Firebase SDK version**: `10.12.5` (loaded from CDN: `https://www.gstatic.com/firebasejs/10.12.5/`)
-
----
-
-## Key Conventions
-
-### No Build Step
-There is no bundler (no Webpack, Vite, Rollup, etc.). Source files are deployed as-is. HTML pages use `<script type="module">` to load JS modules directly.
-
-### ES6 Modules via CDN
-Firebase SDK is imported directly from `gstatic.com` CDN. Do not add these as npm dependencies.
-
-```js
-// Correct pattern — CDN import
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-// Internal module import
-import { auth, db } from "./firebase.js";
-```
-
-### Phone Authentication Pattern
-The app uses Firebase Email/Password auth with a phone-to-email mapping. This is an internal convention — not real email auth:
-
-```js
-// js/auth.js
-function phoneToEmail(phone) {
-  return `${phone}@phone.local`;
-}
-```
-
-Phone numbers are normalized (stripped of country code `+40` / `0040`).
-
-### Romanian Language
-All user-facing strings, comments in HTML templates, and inline UI text are in Romanian. Code comments may be in Romanian or English.
-
-### Screen Routing
-`js/app.js` implements screen switching via `display` toggling on named `div#screen*` elements. Screens are: `screenLoading`, `screenLogin`, `screenContactGate`, `screenCatalog`, `screenAdmin`.
-
-### Inter-module Communication
-Modules communicate via custom DOM events where tight coupling is undesirable:
-
-```js
-// Emitter (catalog.js)
-window.dispatchEvent(new CustomEvent("catalog:submitOrderRequested", { detail: { items } }));
-
-// Listener (app.js)
-window.addEventListener("catalog:submitOrderRequested", async (event) => { ... });
-```
-
-### Service Worker Caching Strategy
-`sw.js` intentionally disables caching for JS, CSS, and HTML to prevent stale file issues on mobile devices. Only other assets (images, etc.) use browser default caching.
+There is **no build system** — no bundler, no transpiler. All modules are native ES modules imported directly in the browser. Firebase SDK is loaded from `https://www.gstatic.com/firebasejs/10.12.5/`.
 
 ---
 
-## Firestore Data Model
+## Repository Structure
+/
+├── index.html # Main SPA entry point (auth + catalog)
+├── admin.html # Admin panel (clients, promotions, notifications, counties)
+├── my-orders.html # Client orders + messages + promotions (loaded in iframe)
+├── messages.html # Admin centralized messaging
+├── reports.html # Admin reports/analytics
+├── orders-admin.html # Admin orders management
+├── catalog.html # Standalone catalog page
+├── styles.css # Global styles for index.html
+├── sw.js # Service worker (network-first, no-store for JS/CSS)
+├── admin.js # Admin panel logic (root-level, used by admin.html)
+├── myOrders.js # Client orders view (root-level, used by my-orders.html)
+├── upload.js # Node.js utility: product image upload
+├── upload-from-url.js # Node.js utility: upload product images from URL
+├── firebase.json # Firebase Hosting config
+├── .firebaserc # Firebase project alias
+├── package.json # Only axios + firebase-admin (utility scripts)
+├── .github/
+│ └── workflows/
+│ ├── firebase-hosting-pull-request.yml # PR preview deploy
+│ └── firebase-hosting-merge.yml # Auto-deploy to live on push to main
+└── js/ # ES module library
+├── config.js # Firebase config (API keys)
+├── firebase.js # Firebase app/auth/db initialization
+├── app.js # Main SPA controller
+├── auth.js # Auth helpers (login, register, ensureUserDoc)
+├── catalog.js # Product loading, rendering, filters, cart UI
+├── cart.js # localStorage cart state
+├── orders.js # Order create/update (Firestore transactions)
+├── profile.js # User profile, county/city lists, contact save
+├── localities.js # COUNTY_CITIES map (extracted shared module)
+├── adminOrders.js # Admin orders management (status, chat, PDF, WhatsApp)
+├── messages.js # Admin centralized chat
+├── reports.js # Admin reports
+├── clientDelivery.js # Client delivery schedule display
+├── clientPromos.js # Client promotions with read tracking
+└── pdf-export.js # PDF export for orders
+---
 
-Key Firestore collections (inferred from code):
+## Architecture
 
-| Collection | Description |
+### Single-Page Application
+
+`index.html` is the root SPA. It shows one of several `<section>` screens at a time:
+
+- `screenLoading` — initial auth check
+- `screenLogin` — phone + password login/register
+- `screenContactGate` — new user contact info form
+- `screenCatalog` — product grid with cart
+- `screenAdmin` — wrapper with an `<iframe id="adminFrame">` that loads secondary pages
+
+Secondary pages (`my-orders.html`, `admin.html`, `messages.html`, `reports.html`) all run inside this iframe.
+
+### Cross-Frame Communication
+
+The parent (`index.html`) and iframe pages communicate via `window.postMessage`:
+
+| Message `action` | Direction | Meaning |
+|---|---|---|
+| `showCatalog` | iframe → parent | Navigate parent back to catalog |
+| `promosRead` | iframe → parent | Clear promotions badge |
+| `messagesRead` | iframe → parent | Clear messages badge |
+| `catalog:submitOrderRequested` | catalog.js → app.js | Submit cart as order (CustomEvent on window) |
+
+### Navigation
+
+Navigation buttons in the topbar open different iframe sources via `openFrame(src, title, subtitle)`:
+
+| Button | Target |
 |---|---|
-| `users/{uid}` | User profile: phone, email, name, county, city, address, status (pending/active) |
-| `products/{id}` | Product catalog items: name, price, category, image, stock |
-| `orders/{id}` | Orders: clientId, clientName, items[], orderNumber, status, timestamps |
-| `cart/{uid}` | Per-user cart state (synced to Firestore) |
-| `promotions/{id}` | Admin-created promotions: title, content, target counties |
-| `messages/{id}` | Chat messages between admin and clients |
-| `config/delivery` | Delivery schedule configuration set by admin |
-| `counters/orders` | Atomic order number counter (updated via Firestore transactions) |
+| Comenzi (client) | `my-orders.html` |
+| Promoții | `my-orders.html?tab=promotions` |
+| Mesaje (client) | `my-orders.html?tab=messages` |
+| Mesaje (admin) | `messages.html` |
+| Admin — Clienți | `admin.html#clients` |
+| Admin — Promoții | `admin.html#promotions` |
+| Admin — Județe | `admin.html#counties` |
+| Rapoarte | `reports.html` |
 
 ---
 
-## Development Workflow
+## Firebase / Firestore Schema
 
-### Making Changes
-1. Edit the relevant `.js` or `.html` file directly — no compilation needed.
-2. Test in browser by opening `index.html` (via a local server or Firebase emulator).
-3. The service worker bypasses local caches, so JS/CSS changes are always fresh.
+### Collections
 
-### Local Development
+#### `users/{uid}`
+```json
+{
+  "uid": "string",
+  "phone": "07XXXXXXXX",
+  "email": "07XXXXXXXX@phone.local",
+  "role": "client | admin",
+  "status": "pending | active",
+  "contact": {
+    "fullName": "string",
+    "kennel": "string (optional)",
+    "address": "string",
+    "county": "string",
+    "city": "string",
+    "completed": true,
+    "completedAt": "Timestamp"
+  },
+  "priceRules": {
+    "globalMarkup": 10,
+    "categories": { "categoryId": 15 }
+  },
+  "seenPromotions": ["promoId1", "promoId2"],
+  "clientType": "string",
+  "channel": "string",
+  "createdAt": "Timestamp",
+  "updatedAt": "Timestamp"
+}orders/{orderId}{
+  "orderNumber": 1001,
+  "clientId": "uid",
+  "clientSnapshot": {
+    "uid": "string",
+    "email": "string",
+    "phone": "string",
+    "fullName": "string",
+    "county": "string",
+    "city": "string",
+    "address": "string",
+    "clientType": "string",
+    "channel": "string"
+  },
+  "items": [
+    {
+      "productId": "string",
+      "name": "string",
+      "qty": 2,
+      "unitPriceFinal": 10.50,
+      "lineTotal": 21.00
+    }
+  ],
+  "total": 21.00,
+  "status": "NEW | CONFIRMED | SENT | DELIVERED | CANCELED",
+  "statusHistory": [{ "status": "NEW", "at": "Timestamp", "adminUid": null }],
+  "createdAt": "Timestamp",
+  "updatedAt": "Timestamp"
+}orders/{orderId}/messages (subcollection){
+  "text": "string",
+  "fromRole": "client | admin",
+  "fromUid": "string",
+  "readByAdmin": false,
+  "readByClient": false,
+  "createdAt": "Timestamp"
+}products/{productId}{
+  "name": "string",
+  "active": true,
+  "sortOrder": 1,
+  "basePrice": 10.50,
+  "categoryId": "string",
+  "producer": "string",
+  "gama": "string",
+  "sku": "string",
+  "description": "string",
+  "imageUrls": ["https://..."]
+}promotions/{promoId}
+{
+  "title": "string",
+  "content": "string",
+  "active": true,
+  "startDate": "Timestamp",
+  "endDate": "Timestamp",
+  "createdAt": "Timestamp"
+}
+counters/orders
+{ "lastNumber": 1005 }
+counties/{countyName}
+{
+  "startDate": "YYYY-MM-DD",
+  "intervalDays": 14
+}
+Authentication
+
+Firebase Auth is used with email/password, but there is no real email. Phone numbers are converted to fake email addresses:
+
+07XXXXXXXX  →  07XXXXXXXX@phone.local
+
+This is done in js/auth.js:phoneToEmail() and also inline in js/app.js. On first login, a user document is created in users/{uid} with role: "client" and status: "pending".
+
+User Roles & Access
+Role	Status	Can see prices	Can place orders	Admin panels
+client	pending	No	No	No
+client	active	Yes	Yes	No
+admin	any	Yes	Yes	Yes (all tabs)
+
+Role is stored in users/{uid}.role. After login, routeAfterAuth() in app.js determines which navigation buttons to show.
+
+Cart
+
+Cart is persisted in localStorage under the key gosbi_cart_v2.
+
+Schema:
+
+{ "items": { "productId": 2, "productId2": 1 }, "updatedAt": 1700000000000 }
+
+Public API (from js/cart.js):
+
+getCart() — returns full cart object
+
+getItemsArray() — returns [{productId, qty}]
+
+getItemCount() — total quantity
+
+getQty(productId) — qty for one product
+
+setQuantity(productId, qty) — set absolute qty
+
+increment(productId, step) — increment/decrement
+
+removeItem(productId) — remove one product
+
+clearCart() — empty cart
+
+Every write dispatches cart:updated CustomEvent on window.
+
+Order Submission Flow
+
+User clicks "Trimite comanda" in catalog.js
+
+catalog.js fires catalog:submitOrderRequested CustomEvent with detail.items
+
+app.js catches it and calls submitOrder() from js/orders.js
+
+orders.js:
+
+Checks sessionStorage.editingOrderId — if set, updates existing order (only if status === "NEW")
+
+Otherwise creates new order using a Firestore transaction
+
+Order number is atomically incremented from counters/orders.lastNumber (starts at 1000)
+
+Cart is cleared after success
+
+Edit mode is activated by setting sessionStorage.editingOrderId and sessionStorage.editingOrderNumber before loading the catalog.
+
+Price Calculation
+
+Prices are computed in js/catalog.js:computeFinalPrice():
+
+Read basePrice (also aliased as priceGross, price, base_price, basePriceRon)
+
+If priceRules.categories[categoryId] exists → apply that markup %
+
+Otherwise apply priceRules.globalMarkup %
+
+Formula: finalPrice = basePrice * (1 + markup / 100)
+
+Prices are only shown to users with status: "active" or role: "admin".
+
+Service Worker
+
+sw.js runs only on Firebase Hosting (not localhost, not GitHub Pages). It can be toggled via URL params:
+
+?nosw=1 — disable SW (useful during development)
+
+?sw=1 — force enable SW
+
+Cache strategy:
+
+HTML pages: network-first, fallback to cache
+
+JS files: always cache: "no-store" (prevents stale scripts)
+
+CSS files: always cache: "no-store"
+
+Everything else (images, etc.): browser default
+
+Version Management / Cache Busting
+
+index.html sets window.APP_VER (currently 42). JS modules are loaded with ?v=42. Bump this number when deploying changes to ensure browsers load the new files:
+
+<script>window.APP_VER = 43;</script>
+<script type="module" src="./js/app.js?v=43"></script>
+CSS Design System
+
+Global CSS variables defined in styles.css:
+
+--bg: #0b0f14         /* page background */
+--card: #121924       /* card background */
+--text: #e8eef6       /* primary text */
+--muted: #9fb0c3      /* secondary text */
+--line: #223044       /* borders */
+--primary: #4da3ff    /* blue accent */
+--danger: #ff5d5d     /* red/error */
+--ok: #35d07f         /* green/success */
+
+The design is dark-themed. All pages use consistent CSS variables. Inline styles are common in dynamically generated HTML (catalog cards, chat messages, etc.).
+
+Key Conventions
+
+All UI text is in Romanian. Variable names and code comments are mostly in Romanian.
+
+Phone numbers are stored and displayed as strings like "0744123456" (no spaces, no country code prefix +40).
+
+Money formatting: use ro-RO locale — Number(v).toLocaleString("ro-RO") → "1.234,56" + lei suffix.
+
+Timestamps: always use Firestore serverTimestamp() for writes; ts.toDate().toLocaleString("ro-RO") for display.
+
+HTML escaping: every module has its own escapeHtml() function — always escape user-generated content before inserting into innerHTML.
+
+No external UI framework: all DOM manipulation is done manually. No React, Vue, or jQuery.
+
+Firebase SDK is CDN-only: never install it via npm for browser code. Only firebase-admin is in package.json (for Node utility scripts).
+
+merge: true on setDoc calls to avoid overwriting fields unexpectedly.
+
+Development Workflow
+Local Development
+
 There is no local dev server configured. Options:
-- Use Firebase CLI: `firebase serve` (requires Firebase CLI installed)
-- Use any static file server: `npx serve .` or VS Code Live Server
-- Firebase emulators: `firebase emulators:start` (for Firestore/Auth locally)
 
-### Deployment
-Deployment happens automatically via GitHub Actions on pull requests (preview channel). For production, merge to main branch (Firebase deploy triggered separately or manually).
+Firebase Emulator (recommended):
 
-**Manual deploy** (if needed):
-```bash
+npm install -g firebase-tools
+firebase emulators:start --only hosting,firestore,auth
+
+Any static server (e.g., npx serve . or VS Code Live Server):
+
+Add ?nosw=1 to URL to disable the service worker during dev
+
+Firestore/Auth will use the live gosbiromania project
+
+Disabling Service Worker During Dev
+
+Append ?nosw=1 to any page URL in Chrome DevTools to prevent the SW from caching JS/CSS files.
+
+Deploying
 firebase deploy --only hosting
-```
 
-### No Tests
+Or let GitHub Actions handle preview deploys on PRs automatically (see .github/workflows/firebase-hosting-pull-request.yml).
+
+After deploying, remember to bump APP_VER in index.html.
+
+No Tests
+
 There is no automated test suite. Testing is done manually in the browser. Do not add a test runner without discussing with the project owner.
 
----
+CI/CD
 
-## CI/CD
+Two GitHub Actions workflows handle Firebase Hosting deploys:
 
-File: `.github/workflows/firebase-hosting-pull-request.yml`
+Preview deploys (.github/workflows/firebase-hosting-pull-request.yml):
 
-- **Trigger**: Pull request events
-- **Build step**: None (`echo "no build"`)
-- **Action**: `FirebaseExtended/action-hosting-deploy@v0` — creates a preview URL per PR
-- **Secrets required**: `FIREBASE_SERVICE_ACCOUNT_GOSBIROMANIA`, `GITHUB_TOKEN`
+Triggers on every pull request
 
----
+Deploys a temporary preview channel to Firebase Hosting
 
-## Important Files Reference
+Requires repository secret: FIREBASE_SERVICE_ACCOUNT_GOSBIROMANIA
 
-| File | Role |
-|---|---|
-| `js/config.js` | Single source of Firebase client config — edit here to change project |
-| `js/firebase.js` | Exports `auth` and `db` — always import from here, never re-initialize |
-| `js/app.js` | Central routing and auth state machine — read before modifying screen flow |
-| `js/orders.js` | Order submission uses Firestore transactions for atomic order numbering |
-| `sw.js` | Modifying caching strategy here affects all update delivery to users |
-| `admin.js` | Root-level script for admin panel — separate from `js/adminOrders.js` |
+No build step (static files deployed as-is)
 
----
+Production deploys (.github/workflows/firebase-hosting-merge.yml):
 
-## Gotchas and Notes
+Triggers on push to main branch
 
-- **Do not add npm packages for frontend use** — there is no bundler to process them. Frontend JS must use CDN imports or inline code.
-- **Firebase SDK version must stay consistent** — all CDN imports use `10.12.5`. Mixing versions will cause runtime errors.
-- **Phone auth is email/password under the hood** — `{phone}@phone.local` is an internal email format, not a real email. Do not change this pattern without migrating existing users.
-- **Admin vs client code is separated by HTML page** — `index.html`/`js/app.js` is for clients; `admin.html`/`admin.js` is for admins. Security rules in Firestore enforce access control.
-- **UI language is Romanian** — all user-facing strings, error messages, and alerts must remain in Romanian.
-- **No TypeScript, no linter, no formatter** — the project uses plain JS. Do not add tooling without confirmation.
+Deploys to the live Firebase Hosting channel (channelId: live)
+
+Requires the same FIREBASE_SERVICE_ACCOUNT_GOSBIROMANIA secret
+
+Auto-generated by Firebase CLI; no build step
+
+Utility Scripts (Node.js)
+
+These scripts run with Node.js and firebase-admin, not in the browser:
+
+upload.js — uploads product images from local files
+
+upload-from-url.js — uploads product images from remote URLs using axios
+
+Run with:
+
+node upload.js
+node upload-from-url.js
+
+Requires a serviceAccountKey.json file (gitignored, never commit this).
+
+Common Pitfalls
+
+Stale JS in production: Always bump APP_VER when deploying changed JS files. The SW prevents old files from being served, but only when version param changes.
+
+Phone auth scheme: Firebase Auth uses email/password internally. The "email" is <phone>@phone.local. Do not confuse with real email-based auth.
+
+Pending vs active clients: New registrations start with status: "pending". Admin must approve them (status: "active") for prices to be visible.
+
+Order edit vs create: Order editing uses sessionStorage keys (editingOrderId, editingOrderNumber). Only orders with status: "NEW" can be edited.
+
+iframe navigation: Secondary pages use postMessage to communicate with the parent. Don't try to navigate the parent window directly from iframe code — use window.parent.postMessage(...).
+
+escapeHtml duplication: Each module has its own copy. This is intentional (no shared utils module). Keep them consistent.
+
+County/city lists: js/localities.js exports COUNTY_CITIES — a shared map of county → city array. It is imported by both js/profile.js (client contact form) and admin.js (admin client card edit). If a city is not in the list, users can type it manually in the input.
+
+Counties Firestore IDs: Document ID in counties/ collection uses the exact county name as ID (e.g., counties/Sălaj). This ensures matching with contact.county from the client profile which also uses COUNTIES_LIST values.
+
+Recent Changes
+2026-02-20
+Extracted js/localities.js (new shared module)
+
+COUNTY_CITIES map (county → city array) extracted from js/profile.js into its own ES module js/localities.js
+
+Both js/profile.js and admin.js now import COUNTY_CITIES from ./localities.js (or ./js/localities.js)
+
+Eliminates duplication and ensures both the client contact form and the admin client-card edit use the same city list
+
+City datalist in admin client cards (admin.js)
+
+The Localitate field in admin client-card edit now uses a <datalist> populated from COUNTY_CITIES for the selected county
+
+Updating the Județ select refreshes the datalist suggestions immediately
+
+Users can still type a city name manually if it's not in the list
+
+Auto-deploy to production on merge to main (.github/workflows/firebase-hosting-merge.yml)
+
+New GitHub Actions workflow added: pushes to main automatically deploy to the live Firebase Hosting channel
+
+Previously only PR preview deploys existed; production had to be deployed manually with firebase deploy
+
+2026-02-19
+Editable contact fields in admin client cards (admin.js)
+
+Added "Date contact" section in renderUserCard() — first section shown in each client card
+
+Fields: Telefon (readonly), Nume complet, Canisă/Felisă, Adresă, Județ (select), Localitate
+
+County select uses the same COUNTIES_LIST as the client registration form
+
+Saved via dot-notation keys ("contact.fullName", etc.) in updateDoc to avoid overwriting contact.completed
+
+Live update of header name as admin types
+
+County name input → predefined dropdown (admin.js — Județe tab)
+
+Replaced free-text <input> with <select> populated from COUNTIES_LIST
+
+Already-configured counties are excluded from the dropdown (no duplicates)
+
+Firestore document ID is now the canonical county name (e.g., counties/Sălaj) instead of a generated slug that stripped diacritics
+
+Fixes delivery day lookup mismatch caused by typos like "Salaj" vs "Sălaj"

@@ -43,7 +43,7 @@ async function loadPromos() {
   if (!_uid) return;
 
   try {
-    // Citim promoțiile active
+    // Citim promoțiile active (filtru suplimentar pe date se face pe client)
     const snap = await getDocs(
       query(
         collection(db, "promotions"),
@@ -51,7 +51,17 @@ async function loadPromos() {
         orderBy("createdAt", "desc")
       )
     );
-    _allPromos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const now = new Date();
+    _allPromos = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(p => {
+        // Dacă are startDate și nu am ajuns încă la ea → ascundem
+        if (p.startDate?.toDate && p.startDate.toDate() > now) return false;
+        // Dacă are endDate și a trecut → ascundem
+        if (p.endDate?.toDate && p.endDate.toDate() < now) return false;
+        return true;
+      });
 
     // Citim ce a văzut deja userul
     const userSnap = await getDoc(doc(db, "users", _uid));
