@@ -15,6 +15,7 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   doc,
   getDoc,
   setDoc,
@@ -179,6 +180,7 @@ onAuthStateChanged(auth, async (u) => {
     await loadUsers();
     await loadPromotions();
     initNotificationsSection();
+    loadPasswordResetRequests();
   } catch (e) {
     console.error("admin init error:", e);
     showMsg(e?.message || String(e), true);
@@ -1029,4 +1031,103 @@ function initNotificationsSection() {
       listEl.innerHTML = `<div style="color:#ff5d5d;padding:10px;">Eroare: ${escapeHtml(e?.message || "")}</div>`;
     }
   };
+}
+
+// -------------------- RESETARE PAROLE --------------------
+
+let _unsubPasswordResets = null;
+
+function loadPasswordResetRequests() {
+  const container = $("passwordResetsContainer");
+  if (!container) return;
+
+  if (_unsubPasswordResets) { try { _unsubPasswordResets(); } catch {} }
+
+  const q = query(
+    collection(db, "passwordResetRequests"),
+    orderBy("createdAt", "desc")
+  );
+
+  _unsubPasswordResets = onSnapshot(q, (snap) => {
+    const requests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderPasswordResets(container, requests);
+  }, (err) => {
+    container.innerHTML = `<div style="color:#ff5d5d;font-size:13px;">Eroare: ${escapeHtml(err?.message || "")}</div>`;
+  });
+}
+
+function renderPasswordResets(container, requests) {
+  if (!requests.length) {
+    container.innerHTML = `<div style="opacity:.5;font-size:13px;padding:10px 0;">Nu există cereri de resetare.</div>`;
+    return;
+  }
+
+  const pending = requests.filter(r => r.status !== 'resolved');
+  const resolved = requests.filter(r => r.status === 'resolved');
+
+  let html = '';
+
+  if (pending.length) {
+    html += `<div class="section-title" style="margin-top:0;">⏳ În așteptare (${pending.length})</div>`;
+    pending.forEach(req => {
+      const when = req.createdAt?.toDate ? req.createdAt.toDate().toLocaleString('ro-RO') : '—';
+      const consoleUrl = `https://console.firebase.google.com/project/gosbiromania/authentication/users`;
+      html += `
+        <div style="border:1px solid rgba(255,183,77,.25);background:rgba(255,183,77,.05);border-radius:14px;padding:14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:900;font-size:15px;">${escapeHtml(req.phone || '—')}</div>
+              <div style="font-size:12px;opacity:.55;margin-top:2px;">${escapeHtml(when)}</div>
+              <div style="font-size:12px;color:#4da3ff;margin-top:4px;">
+                Email Firebase: <code>${escapeHtml(req.email || req.phone + '@phone.local')}</code>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <a href="${consoleUrl}" target="_blank" rel="noopener"
+                style="padding:8px 12px;border-radius:10px;background:rgba(77,163,255,.15);border:1px solid rgba(77,163,255,.3);color:#4da3ff;font-weight:700;font-size:13px;text-decoration:none;white-space:nowrap;">
+                Firebase Console
+              </a>
+              <button data-id="${escapeHtml(req.id)}" class="btnResolveReset"
+                style="padding:8px 12px;border-radius:10px;background:rgba(53,208,127,.15);border:1px solid rgba(53,208,127,.3);color:#35d07f;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">
+                ✓ Marcat rezolvat
+              </button>
+            </div>
+          </div>
+        </div>`;
+    });
+  }
+
+  if (resolved.length) {
+    html += `<div class="section-title" style="margin-top:20px;">✅ Rezolvate (${resolved.length})</div>`;
+    resolved.forEach(req => {
+      const when = req.resolvedAt?.toDate ? req.resolvedAt.toDate().toLocaleString('ro-RO') : '—';
+      html += `
+        <div style="border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);border-radius:14px;padding:12px 14px;margin-bottom:8px;opacity:.7;">
+          <div style="font-weight:700;font-size:14px;">${escapeHtml(req.phone || '—')}</div>
+          <div style="font-size:12px;opacity:.55;">Rezolvat: ${escapeHtml(when)}</div>
+        </div>`;
+    });
+  }
+
+  container.innerHTML = html;
+
+  // Attach resolve handlers
+  container.querySelectorAll('.btnResolveReset').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!id) return;
+      btn.disabled = true;
+      btn.textContent = 'Se salvează…';
+      try {
+        await updateDoc(doc(db, 'passwordResetRequests', id), {
+          status: 'resolved',
+          resolvedAt: serverTimestamp(),
+        });
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '✓ Marcat rezolvat';
+        alert(e?.message || 'Eroare.');
+      }
+    });
+  });
 }
