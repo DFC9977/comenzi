@@ -433,7 +433,7 @@ function ensureStickyCartBar() {
   bar.querySelector("#btnSubmitOrder").addEventListener("click", () => {
     const count = getItemCount();
     if (count <= 0) return alert("Coșul este gol.");
-    window.dispatchEvent(new CustomEvent("catalog:submitOrderRequested"));
+    window.dispatchEvent(new CustomEvent("catalog:submitOrderRequested", { detail: { items: getItemsArray() } }));
   });
 
   // padding for mobile so bar doesn't cover content

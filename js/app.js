@@ -349,7 +349,7 @@ btnLogin?.addEventListener("click", async () => {
   const pass = String(loginPass.value || "");
 
   if (!phone) return showNote(loginMsg, "Completează telefonul.", "err");
-  if (pass.length < 4) return showNote(loginMsg, "Parola e prea scurtă.", "err");
+  if (pass.length < 6) return showNote(loginMsg, "Parola e prea scurtă.", "err");
 
   try {
     btnLogin.disabled = true;
