@@ -479,7 +479,13 @@ function openFrame(src, title, subtitle) {
   if (subtitleEl) subtitleEl.textContent = subtitle || "";
 }
 
-btnOrders?.addEventListener("click", () => openFrame("./my-orders.html", "Comenzile mele", ""));
+btnOrders?.addEventListener("click", () => {
+  if (__isAdminSession) {
+    openFrame("./orders-admin.html", "Comenzi", "Administrare comenzi");
+  } else {
+    openFrame("./my-orders.html", "Comenzile mele", "");
+  }
+});
 btnPromos?.addEventListener("click", () => openFrame("./my-orders.html?tab=promotions", "Promoții", ""));
 btnAdminClients?.addEventListener("click", () => openFrame("./admin.html#clients", "Admin — Clienți", "Aprobări / adaos / recomandări"));
 btnAdminPromos?.addEventListener("click", () => openFrame("./admin.html#promotions", "Admin — Promoții", ""));
