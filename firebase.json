@@ -7,7 +7,7 @@
     "runtime": "nodejs20"
   },
   "hosting": {
-    "site": "gosbiromania",
+    "site": "comenzi-2969b",
     "public": ".",
     "ignore": [
       "firebase.json",
