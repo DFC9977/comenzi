@@ -1,6 +1,14 @@
 {
+  "name": "gosbi-comenzi",
+  "private": true,
+  "scripts": {
+    "test:ci:smoke": "CI=true SMOKE_TEST=true npx playwright test tests/e2e/order-workflow.spec.js --project=chromium --workers=2"
+  },
   "dependencies": {
     "axios": "^1.13.5",
     "firebase-admin": "^13.6.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
   }
 }
