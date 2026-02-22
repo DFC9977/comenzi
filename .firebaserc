@@ -1,5 +1,9 @@
 {
   "projects": {
-    "default": "gosbiromania"
-  }
+    "default": "gosbiromania",
+    "prod": "comenzi-2969b",
+    "staging": "gosbiromania"
+  },
+  "targets": {},
+  "etags": {}
 }
