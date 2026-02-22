@@ -1,5 +1,5 @@
 {
-  "name": "gosbi-comenzi",
+  "name": "gosbi-professional-comenzi",
   "private": true,
   "scripts": {
     "test:ci:smoke": "CI=true SMOKE_TEST=true npx playwright test tests/e2e/order-workflow.spec.js --project=chromium --workers=2"
