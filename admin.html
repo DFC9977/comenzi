@@ -125,6 +125,40 @@
     /* ---- ADMIN SECTIONS hidden until logged in ---- */
     .admin-section { display: none; }
 
+    /* ---- SKELETON ---- */
+    .skeleton {
+      background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.04) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 14px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ---- CLIENT SEARCH ---- */
+    .client-search-wrap {
+      position: sticky;
+      top: 105px; /* topbar(57px) + tabs(~48px) */
+      z-index: 80;
+      background: var(--bg);
+      padding: 10px 0 12px;
+      margin-bottom: 4px;
+    }
+    #clientSearchInput {
+      width: 100%; padding: 10px 36px 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+      color: #fff; font-size: 15px;
+    }
+    #clientSearchInput:focus { outline: none; border-color: var(--primary); }
+    #clientSearchClear {
+      display: none; position: absolute;
+      right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none;
+      color: rgba(255,255,255,.55); font-size: 18px;
+      cursor: pointer; line-height: 1; padding: 0 2px;
+    }
+
     /* ---- Quill editor dark theme (promo) ---- */
     .ql-toolbar.ql-snow { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.06); border-radius: 10px 10px 0 0; }
     .ql-container.ql-snow { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.04); border-radius: 0 0 10px 10px; min-height: 120px; }
@@ -245,11 +279,20 @@
 
     <!-- ===== TAB: CLIENȚI ===== -->
     <div class="tab-panel active" id="panelClients">
+      <div class="client-search-wrap">
+        <div style="position:relative;">
+          <input id="clientSearchInput" type="search" placeholder="Caută după nume, telefon, email…" autocomplete="off" />
+          <button id="clientSearchClear" type="button">✕</button>
+        </div>
+      </div>
       <div class="section-title">⏳ Clienți în așteptare</div>
       <div id="pending"></div>
       <div class="section-title" style="margin-top:28px;">✅ Clienți activi</div>
       <div id="active"></div>
     </div>
+
+    <!-- ===== DETALIU CLIENT (nu e tab propriu-zis, e afișat via hash) ===== -->
+    <div class="tab-panel" id="panelClientDetail"></div>
 
     <!-- ===== TAB: PROMOȚII ===== -->
     <div class="tab-panel" id="panelPromotions">
@@ -311,16 +354,23 @@
     const tab = document.querySelector(`.tab[data-panel="${panelId}"]`);
     if (tab) tab.classList.add("active");
   }
+  // Expose for admin.js module usage
+  window.activateTabById = activateTabById;
 
   tabs.forEach(tab => {
-    tab.addEventListener("click", () => activateTabById(tab.dataset.panel));
+    tab.addEventListener("click", () => {
+      const panelId = tab.dataset.panel;
+      activateTabById(panelId);
+      // Sync hash for Clienți tab so back-navigation works
+      if (panelId === "panelClients") location.hash = "clients";
+    });
   });
 
   // Detecție hash din URL: admin.html#promotions / #counties / #clients
   const hashMap = {
-    clients:     "panelClients",
-    promotions:  "panelPromotions",
-    counties:    "panelCounties",
+    clients:       "panelClients",
+    promotions:    "panelPromotions",
+    counties:      "panelCounties",
     notifications: "panelNotifications",
   };
   const hash = location.hash.replace("#", "");
@@ -337,6 +387,16 @@
     // Fallback după 1s
     setTimeout(() => activateTabById(hashMap[hash]), 1000);
   }
+
+  // hashchange: delegate to admin.js once it registers window.adminSyncHash
+  window.addEventListener("hashchange", () => {
+    if (typeof window.adminSyncHash === "function") {
+      window.adminSyncHash();
+    } else {
+      const h = location.hash.replace("#", "");
+      if (hashMap[h]) activateTabById(hashMap[h]);
+    }
+  });
 </script>
 
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>

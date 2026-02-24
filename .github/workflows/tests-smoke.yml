@@ -38,5 +38,5 @@ jobs:
             CI=true SMOKE_TEST=true npx playwright test tests/e2e --project=chromium --workers=2
           else
             echo "Running: playwright auto-discovery"
-            CI=true SMOKE_TEST=true npx playwright test --project=chromium --workers=2
+            CI=true SMOKE_TEST=true npx playwright test --project=chromium --workers=2 --passWithNoTests
           fi

@@ -34,6 +34,7 @@ const $ = (id) => document.getElementById(id);
 
 let ALL_CATEGORIES = [];
 let ALL_USERS = [];
+let ALL_CLIENTS = [];
 let ALL_PRODUCTS = [];
 let ALL_COUNTIES = [];
 
@@ -45,6 +46,11 @@ const COUNTIES_LIST = [
 ];
 
 // -------------------- HELPERS --------------------
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
 
 function escapeHtml(s) {
   return String(s || "")
@@ -234,6 +240,8 @@ onAuthStateChanged(auth, async (u) => {
     await loadPromotions();
     initNotificationsSection();
     loadPasswordResetRequests();
+    // Handle hash present on page load (e.g. direct link to #client/{uid})
+    syncAdminPanelFromHash();
   } catch (e) {
     console.error("admin init error:", e);
     showMsg(e?.message || String(e), true);
@@ -275,26 +283,106 @@ async function loadCounties() {
 }
 
 async function loadUsers() {
-  $("pending").innerHTML = "";
-  $("active").innerHTML = "";
+  const skel = '<div class="skeleton" style="height:74px;margin-bottom:10px;"></div>';
+  const pendingEl = $("pending"); const activeEl = $("active");
+  if (pendingEl) pendingEl.innerHTML = skel.repeat(2);
+  if (activeEl)  activeEl.innerHTML  = skel.repeat(3);
   try {
     const allSnap = await getDocs(collection(db, "users"));
-    ALL_USERS = [];
+    ALL_USERS = []; ALL_CLIENTS = [];
     allSnap.forEach(s => {
       const d = s.data() || {};
       ALL_USERS.push({ uid: s.id, phone: d.phone || "", name: d.contact?.fullName || "" });
+      if (d.role !== "admin") ALL_CLIENTS.push({ uid: s.id, ...d });
     });
-
-    const pendSnap = await getDocs(query(collection(db, "users"), where("status", "==", "pending")));
-    $("pending").innerHTML = pendSnap.size ? "" : `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client în așteptare.</div>`;
-    pendSnap.forEach(s => $("pending").appendChild(renderUserCard(s.id, s.data(), true)));
-
-    const actSnap = await getDocs(query(collection(db, "users"), where("status", "==", "active")));
-    $("active").innerHTML = actSnap.size ? "" : `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client activ.</div>`;
-    actSnap.forEach(s => $("active").appendChild(renderUserCard(s.id, s.data(), false)));
+    renderClientsList("");
+    initClientSearch();
   } catch (e) {
     console.error(e);
     showMsg(e?.message || String(e), true);
+  }
+}
+
+function renderClientsList(term) {
+  const pendingEl = $("pending"); const activeEl = $("active");
+  if (!pendingEl || !activeEl) return;
+  const q = (term || "").trim().toLowerCase();
+  const filtered = q
+    ? ALL_CLIENTS.filter(c => {
+        const name  = (c.contact?.fullName || "").toLowerCase();
+        const phone = (c.phone  || "").toLowerCase();
+        const email = (c.email  || "").toLowerCase();
+        return name.includes(q) || phone.includes(q) || email.includes(q);
+      })
+    : ALL_CLIENTS;
+  const pending = filtered.filter(c => c.status === "pending");
+  const active  = filtered.filter(c => c.status === "active");
+
+  if (!ALL_CLIENTS.length) {
+    pendingEl.innerHTML = "";
+    activeEl.innerHTML  = `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client.</div>`;
+    return;
+  }
+
+  const noMatch = `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client găsit.</div>`;
+  pendingEl.innerHTML = pending.length ? "" : (q ? noMatch : `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client în așteptare.</div>`);
+  pending.forEach(c => pendingEl.appendChild(renderClientRow(c.uid, c)));
+
+  activeEl.innerHTML = active.length ? "" : (q ? noMatch : `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client activ.</div>`);
+  active.forEach(c => activeEl.appendChild(renderClientRow(c.uid, c)));
+}
+
+function renderClientRow(uid, u) {
+  const a = document.createElement("a");
+  a.href = `admin.html#client/${uid}`;
+  a.style.cssText = "display:block;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);border-radius:14px;padding:14px 16px;margin-bottom:10px;text-decoration:none;color:inherit;cursor:pointer;transition:background .12s;";
+  a.addEventListener("mouseenter", () => { a.style.background = "rgba(255,255,255,.06)"; });
+  a.addEventListener("mouseleave", () => { a.style.background = "rgba(255,255,255,.03)"; });
+  const isPending = u.status === "pending";
+  const fontColor = escapeHtml(u.fontColor || "#e8eef6");
+  a.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <div>
+        <div style="font-weight:900;font-size:16px;color:${fontColor};">${escapeHtml(u.contact?.fullName || "(fără nume)")}</div>
+        <div style="font-size:13px;opacity:.6;margin-top:2px;">${escapeHtml(u.phone || uid)}</div>
+      </div>
+      <span style="background:${isPending ? "rgba(245,166,35,.15)" : "rgba(53,208,127,.15)"};color:${isPending ? "#f5a623" : "#35d07f"};border:1px solid ${isPending ? "rgba(245,166,35,.3)" : "rgba(53,208,127,.3)"};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;white-space:nowrap;">${isPending ? "PENDING" : "ACTIV"}</span>
+    </div>
+  `;
+  a.addEventListener("click", (e) => {
+    if (e.button !== 0 || e.ctrlKey || e.metaKey) return; // let browser open new tab
+    e.preventDefault();
+    sessionStorage.setItem("adminClientsSearch", $("clientSearchInput")?.value || "");
+    location.hash = `client/${uid}`;
+  });
+  return a;
+}
+
+function initClientSearch() {
+  const input  = $("clientSearchInput");
+  const clearBtn = $("clientSearchClear");
+  if (!input) return;
+  const debouncedFilter = debounce((val) => renderClientsList(val), 300);
+  input.addEventListener("input", () => {
+    const val = input.value;
+    if (clearBtn) clearBtn.style.display = val ? "block" : "none";
+    debouncedFilter(val);
+  });
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      clearBtn.style.display = "none";
+      renderClientsList("");
+      input.focus();
+    });
+  }
+  // Restore search term saved before navigating to detail
+  const saved = sessionStorage.getItem("adminClientsSearch");
+  if (saved) {
+    input.value = saved;
+    if (clearBtn) clearBtn.style.display = saved ? "block" : "none";
+    renderClientsList(saved);
+    sessionStorage.removeItem("adminClientsSearch");
   }
 }
 
@@ -1288,3 +1376,50 @@ function renderPasswordResets(container, requests) {
     });
   });
 }
+
+// -------------------- CLIENT DETAIL (hash routing) --------------------
+
+function renderClientDetail(uid) {
+  const panel = $("panelClientDetail");
+  if (!panel) return;
+  const client = ALL_CLIENTS.find(c => c.uid === uid);
+  panel.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <a href="admin.html#clients" id="backToClients"
+         style="color:#4da3ff;font-size:14px;text-decoration:none;font-weight:700;">← Înapoi la clienți</a>
+    </div>
+  `;
+  if (!client) {
+    panel.innerHTML += `<div style="opacity:.6;font-size:14px;">Client negăsit (UID: ${escapeHtml(uid)}).</div>`;
+  } else {
+    panel.appendChild(renderUserCard(uid, client, client.status === "pending"));
+  }
+  $("backToClients").addEventListener("click", (e) => {
+    e.preventDefault();
+    location.hash = "clients";
+  });
+}
+
+function syncAdminPanelFromHash() {
+  const raw = location.hash.replace("#", "");
+  if (raw.startsWith("client/")) {
+    const uid = raw.slice(7);
+    // Keep "Clienți" tab highlighted, show detail panel
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    const tab = document.querySelector('.tab[data-panel="panelClients"]');
+    if (tab) tab.classList.add("active");
+    const detail = $("panelClientDetail");
+    if (detail) detail.classList.add("active");
+    renderClientDetail(uid);
+  } else if (raw === "clients" || raw === "") {
+    window.activateTabById?.("panelClients");
+  } else {
+    const map = { promotions: "panelPromotions", counties: "panelCounties", notifications: "panelNotifications", "password-resets": "panelPasswordResets" };
+    if (map[raw]) window.activateTabById?.(map[raw]);
+  }
+}
+
+// Register handler after module loads so hashchange delegate in admin.html can use it.
+// Also handle the hash that was already in the URL when the page loaded.
+window.adminSyncHash = syncAdminPanelFromHash;
