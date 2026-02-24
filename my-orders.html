@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Comenzile mele</title>
   <style>
-    :root { color-scheme: dark; }
+    :root { color-scheme: dark; --primary: #4da3ff; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
@@ -167,18 +167,75 @@
       border: 1px solid rgba(255,255,255,.08);
       background: rgba(255,255,255,.03);
       border-radius: 14px; padding: 14px; margin-bottom: 10px;
+      letter-spacing: normal; text-transform: none;
     }
     .promo-card.unread {
       border-color: rgba(77,163,255,.25);
       background: rgba(77,163,255,.05);
     }
-    .promo-text { font-size: 15px; line-height: 1.5; }
+    .promo-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 8px; margin-bottom: 6px;
+    }
+    .promo-title {
+      font-size: 15px; font-weight: 800; line-height: 1.35;
+      overflow-wrap: anywhere; word-break: break-word;
+      flex: 1; min-width: 0;
+    }
+    .promo-chips {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
+    }
+    .promo-chip {
+      display: inline-block;
+      background: rgba(77,163,255,.2); color: #4da3ff;
+      border-radius: 12px; padding: 4px 10px;
+      font-size: 12px; font-weight: 800;
+    }
+    .promo-text,
+    .promo-text-html {
+      font-size: 15px; line-height: 1.5;
+      overflow-wrap: anywhere; word-break: break-word;
+      letter-spacing: normal; text-transform: none;
+      min-width: 0;
+      white-space: normal;
+    }
+    /* ----- Premium promo content styling (Client) ----- */
+    .promo-text-html {
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .promo-text-html p {
+      margin: 0 0 10px 0;
+    }
+    .promo-text-html p:last-child {
+      margin-bottom: 0;
+    }
+    .promo-text-html ul,
+    .promo-text-html ol {
+      margin: 8px 0 8px 20px;
+      padding: 0;
+    }
+    .promo-text-html li {
+      margin: 3px 0;
+    }
+    .promo-text-html a {
+      color: var(--primary);
+      text-decoration: underline;
+    }
     .promo-meta { font-size: 12px; opacity: .5; margin-top: 8px; }
     .promo-new-badge {
       display: inline-block;
       background: rgba(77,163,255,.2); color: #4da3ff;
       border-radius: 20px; padding: 2px 8px;
       font-size: 11px; font-weight: 800; margin-left: 6px;
+      flex-shrink: 0;
+    }
+    @media (max-width: 480px) {
+      .promo-card { padding: 12px; margin-bottom: 12px; }
+      .promo-title { font-size: 14px; }
+      .promo-text, .promo-text-html { font-size: 14px; line-height: 1.5; }
+      .promo-meta { font-size: 11px; margin-top: 6px; }
+      #promosList { padding-bottom: 8px; }
     }
 
     /* ---- CHAT SHEET ---- */
@@ -226,6 +283,16 @@
 
     .muted { opacity: .7; font-size: 14px; padding: 10px 0; }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js",
+      "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js"
+    }
+  }
+  </script>
 </head>
 <body>
 
@@ -280,7 +347,7 @@
 <!-- ===== TAB: PROMOȚII ===== -->
 <div class="tab-panel" id="panelPromos">
   <div class="wrap">
-    <div id="promosList">
+    <div id="promosList" class="promos-list">
       <div class="muted">Se încarcă promoțiile…</div>
     </div>
   </div>
