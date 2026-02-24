@@ -4,6 +4,13 @@
     "prod": "comenzi-2969b",
     "staging": "gosbiromania"
   },
-  "targets": {},
+  "targets": {
+    "gosbiromania": {
+      "hosting": {
+        "staging": ["gosbiromania"],
+        "prod": ["comenzi-2969b"]
+      }
+    }
+  },
   "etags": {}
 }
