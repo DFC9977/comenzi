@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin — Gosbi</title>
+  <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.7/quill.snow.css" />
   <style>
     :root {
       --bg: #0b0f14;
@@ -123,7 +124,87 @@
 
     /* ---- ADMIN SECTIONS hidden until logged in ---- */
     .admin-section { display: none; }
+
+    /* ---- Quill editor dark theme (promo) ---- */
+    .ql-toolbar.ql-snow { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.06); border-radius: 10px 10px 0 0; }
+    .ql-container.ql-snow { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.04); border-radius: 0 0 10px 10px; min-height: 120px; }
+    .ql-editor { color: var(--text); font-size: 14px; min-height: 100px; }
+    .ql-editor.ql-blank::before { color: var(--muted); }
+    .ql-snow .ql-stroke { stroke: rgba(255,255,255,.35); }
+    .ql-snow .ql-fill { fill: rgba(255,255,255,.35); }
+    .ql-snow .ql-picker { color: rgba(255,255,255,.8); }
+    .ql-snow .ql-toolbar button:hover .ql-stroke { stroke: var(--primary); }
+    .ql-snow .ql-toolbar button.ql-active .ql-stroke { stroke: var(--primary); }
+    .promo-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .promo-content-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding-bottom: 6px;
+    }
+    .promo-content-body {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: normal;
+      white-space: normal;
+    }
+    /* ----- Premium promo content styling (Admin) ----- */
+    .promo-content-body {
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 6px;
+    }
+    .promo-content-body p {
+      margin: 0 0 10px 0;
+    }
+    .promo-content-body p:last-child {
+      margin-bottom: 0;
+    }
+    .promo-content-body ul,
+    .promo-content-body ol {
+      margin: 8px 0 8px 20px;
+      padding: 0;
+    }
+    .promo-content-body li {
+      margin: 3px 0;
+    }
+    .promo-content-body a {
+      color: var(--primary);
+      text-decoration: underline;
+    }
+    .promo-actions-wrap {
+      flex: 0 0 auto;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    @media (max-width: 520px) {
+      .promo-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .promo-actions-wrap {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js",
+      "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js"
+    }
+  }
+  </script>
 </head>
 <body>
 
@@ -258,6 +339,7 @@
   }
 </script>
 
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script type="module" src="./admin.js"></script>
 </body>
 </html>

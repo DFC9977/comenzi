@@ -6,15 +6,28 @@
     "source": "functions",
     "runtime": "nodejs20"
   },
-  "hosting": {
-    "site": "comenzi-2969b",
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      ".firebaserc",
-      ".git/**",
-      "node_modules/**",
-      "functions/**"
-    ]
-  }
+  "hosting": [
+    {
+      "target": "staging",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        ".firebaserc",
+        ".git/**",
+        "node_modules/**",
+        "functions/**"
+      ]
+    },
+    {
+      "target": "prod",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        ".firebaserc",
+        ".git/**",
+        "node_modules/**",
+        "functions/**"
+      ]
+    }
+  ]
 }

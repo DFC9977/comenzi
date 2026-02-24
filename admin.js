@@ -55,6 +55,55 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+/** Sanitize HTML for promo display (Quill output). Does NOT strip p, br, ul, ol, li. Allowed: p, br, strong, em, u, a[href], ol, ul, li, span. Safe href only. */
+function sanitizePromoHtml(html, fallbackText) {
+  if (!html || typeof html !== "string") return escapeHtml(fallbackText || "");
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "a", "ol", "ul", "li", "span"]);
+    const safeHref = (href) => {
+      if (!href || typeof href !== "string") return false;
+      const t = href.trim().toLowerCase();
+      return t.startsWith("http://") || t.startsWith("https://") || t.startsWith("mailto:");
+    };
+    const walk = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) { node.remove(); return; }
+      const tag = node.tagName.toLowerCase();
+      if (tag === "script" || tag === "style") { node.remove(); return; }
+      if (!allowedTags.has(tag)) {
+        while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+        node.remove();
+        return;
+      }
+      const attrs = node.getAttributeNames();
+      for (const a of attrs) {
+        if (a.startsWith("on") || a === "style") { node.removeAttribute(a); continue; }
+        if (tag === "a" && a === "href") { if (!safeHref(node.getAttribute(a))) node.removeAttribute(a); continue; }
+        if (a !== "href") node.removeAttribute(a);
+      }
+      for (let i = node.childNodes.length - 1; i >= 0; i--) walk(node.childNodes[i]);
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  } catch (e) {
+    return escapeHtml(fallbackText || html || "");
+  }
+}
+
+function formatPlainTextToHtml(text) {
+  const safe = escapeHtml(text || "");
+  return safe.replace(/\r\n|\r|\n/g, "<br>");
+}
+
+/** Returns HTML for promo card (use with innerHTML only). Preserves p, br, ul, ol, li from contentHtml. */
+function getPromoContentForDisplay(p) {
+  if (p.contentHtml && p.contentHtml.trim()) {
+    return sanitizePromoHtml(p.contentHtml, p.contentText || p.text || "");
+  }
+  return formatPlainTextToHtml(p.contentText || p.text || "");
+}
+
 function showMsg(text, isErr = false) {
   const el = $("err");
   if (!el) return;
@@ -796,15 +845,19 @@ function formatPromoInterval(p) {
   return "";
 }
 
+const QUILL_TOOLBAR = [["bold", "italic", "underline"], ["link"], [{ list: "ordered" }, { list: "bullet" }], ["clean"]];
+
+let addQuill = null;
+let currentEditQuill = null;
+
 function renderPromotions(container, promos) {
   const inputStyle = `width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-size:14px;box-sizing:border-box;`;
 
   container.innerHTML = `
     <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;margin-bottom:20px;">
       <div style="font-size:12px;font-weight:800;opacity:.45;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;">Promoție nouă</div>
-      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text promoție</label>
-      <textarea id="promoText" rows="3" placeholder="ex: 🎉 Reducere 10% până pe 31 martie!"
-        style="${inputStyle}resize:vertical;margin-bottom:10px;"></textarea>
+      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Conținut promoție</label>
+      <div id="promoQuillEditor" style="margin-bottom:10px;min-width:0;"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
           <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată start (opțional)</label>
@@ -822,13 +875,22 @@ function renderPromotions(container, promos) {
     <div id="promoList"></div>
   `;
 
+  if (typeof Quill !== "undefined") {
+    addQuill = new Quill("#promoQuillEditor", { theme: "snow", modules: { toolbar: QUILL_TOOLBAR } });
+  }
+
   $("btnAddPromo").onclick = async () => {
-    const text = $("promoText").value.trim();
-    if (!text) return alert("Completează textul.");
+    const contentText = addQuill ? addQuill.getText().trim() : "";
+    if (!contentText) return alert("Completează conținutul.");
     const startVal = $("promoStart").value;
     const endVal   = $("promoEnd").value;
+    const contentHtml = addQuill ? addQuill.root.innerHTML : contentText;
+    const contentDelta = addQuill && addQuill.getContents ? addQuill.getContents() : null;
     const payload = {
-      text,
+      contentHtml,
+      contentDelta: contentDelta && contentDelta.ops ? { ops: contentDelta.ops } : null,
+      contentText,
+      text: contentText,
       active: true,
       createdAt: serverTimestamp(),
       createdBy: auth.currentUser?.uid || "",
@@ -836,7 +898,7 @@ function renderPromotions(container, promos) {
       endDate:   endVal   ? new Date(endVal)   : null,
     };
     await addDoc(collection(db, "promotions"), payload);
-    $("promoText").value = "";
+    if (addQuill) addQuill.setContents([]);
     $("promoStart").value = "";
     $("promoEnd").value = "";
     await loadPromotions();
@@ -852,24 +914,25 @@ function renderPromotions(container, promos) {
     const status   = calcPromoStatus(p);
     const interval = formatPromoInterval(p);
     const when     = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("ro-RO") : "";
+    const contentSafe = getPromoContentForDisplay(p);
+    const previewText = p.contentText || p.text || "";
 
     const row = document.createElement("div");
     row.style.cssText = `border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);border-radius:14px;padding:14px;margin-bottom:10px;`;
 
-    // VIEW mode
     const viewEl = document.createElement("div");
     viewEl.className = "promo-view";
     viewEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:15px;margin-bottom:6px;word-break:break-word;">${escapeHtml(p.text)}</div>
+      <div class="promo-row">
+        <div class="promo-content-wrap">
+          <div class="promo-content-body"></div>
           <div style="font-size:12px;opacity:.5;">
             Creat: ${when}
             ${interval ? `&nbsp;|&nbsp; 📅 ${escapeHtml(interval)}` : ""}
             &nbsp;|&nbsp; <span style="color:${status.color};font-weight:700;">${status.label}</span>
           </div>
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+        <div class="promo-actions-wrap">
           <button class="btnEditPromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;">✏️ Editează</button>
           <button class="btnTogglePromo" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:13px;white-space:nowrap;">
             ${p.active ? "Dezactivează" : "Activează"}
@@ -878,15 +941,15 @@ function renderPromotions(container, promos) {
         </div>
       </div>
     `;
+    viewEl.querySelector(".promo-content-body").innerHTML = contentSafe;
 
-    // EDIT mode
     const editEl = document.createElement("div");
     editEl.className = "promo-edit";
     editEl.style.display = "none";
     editEl.innerHTML = `
       <div style="font-size:12px;font-weight:800;opacity:.45;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Editează promoție</div>
-      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Text</label>
-      <textarea class="editText" rows="3" style="${inputStyle}resize:vertical;margin-bottom:10px;">${escapeHtml(p.text)}</textarea>
+      <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Conținut</label>
+      <div class="editQuillContainer" style="min-width:0;margin-bottom:10px;"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
           <label style="display:block;font-size:12px;opacity:.6;margin-bottom:4px;">Dată start</label>
@@ -897,8 +960,8 @@ function renderPromotions(container, promos) {
           <input class="editEnd" type="date" value="${tsToInputDate(p.endDate)}" style="${inputStyle}" />
         </div>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btnSaveEdit" style="flex:1;padding:12px;border-radius:12px;border:none;background:#35d07f;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">💾 Salvează</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btnSaveEdit" style="flex:1;min-width:120px;padding:12px;border-radius:12px;border:none;background:#35d07f;color:#07111d;font-weight:900;font-size:15px;cursor:pointer;">💾 Salvează</button>
         <button class="btnCancelEdit" style="padding:12px 20px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">Anulează</button>
       </div>
     `;
@@ -906,40 +969,57 @@ function renderPromotions(container, promos) {
     row.appendChild(viewEl);
     row.appendChild(editEl);
 
-    // Toggle edit
     viewEl.querySelector(".btnEditPromo").onclick = () => {
       viewEl.style.display = "none";
       editEl.style.display = "block";
+      const container = editEl.querySelector(".editQuillContainer");
+      if (currentEditQuill) try { currentEditQuill.destroy(); } catch (e) {}
+      currentEditQuill = null;
+      if (typeof Quill !== "undefined" && container) {
+        currentEditQuill = new Quill(container, { theme: "snow", modules: { toolbar: QUILL_TOOLBAR } });
+        if (p.contentDelta && p.contentDelta.ops && p.contentDelta.ops.length) {
+          currentEditQuill.setContents(p.contentDelta);
+        } else if (p.contentHtml) {
+          currentEditQuill.clipboard.dangerouslyPasteHTML(sanitizePromoHtml(p.contentHtml, p.contentText || p.text || ""));
+        } else {
+          currentEditQuill.setText(p.text || p.contentText || "");
+        }
+      }
     };
+
     editEl.querySelector(".btnCancelEdit").onclick = () => {
+      if (currentEditQuill) try { currentEditQuill.destroy(); } catch (e) {}
+      currentEditQuill = null;
       editEl.style.display = "none";
       viewEl.style.display = "block";
     };
 
-    // Save edit
     editEl.querySelector(".btnSaveEdit").onclick = async () => {
-      const newText  = editEl.querySelector(".editText").value.trim();
-      if (!newText) return alert("Textul nu poate fi gol.");
-      const startVal = editEl.querySelector(".editStart").value;
-      const endVal   = editEl.querySelector(".editEnd").value;
+      const contentText = currentEditQuill ? currentEditQuill.getText().trim() : "";
+      if (!contentText) return alert("Conținutul nu poate fi gol.");
+      const contentHtml = currentEditQuill ? currentEditQuill.root.innerHTML : contentText;
+      const contentDelta = currentEditQuill && currentEditQuill.getContents ? currentEditQuill.getContents() : null;
       await updateDoc(doc(db, "promotions", p.id), {
-        text:      newText,
-        startDate: startVal ? new Date(startVal) : null,
-        endDate:   endVal   ? new Date(endVal)   : null,
+        contentHtml,
+        contentDelta: contentDelta && contentDelta.ops ? { ops: contentDelta.ops } : null,
+        contentText,
+        text: contentText,
+        startDate: editEl.querySelector(".editStart").value ? new Date(editEl.querySelector(".editStart").value) : null,
+        endDate:   editEl.querySelector(".editEnd").value ? new Date(editEl.querySelector(".editEnd").value) : null,
         updatedAt: serverTimestamp(),
       });
+      if (currentEditQuill) try { currentEditQuill.destroy(); } catch (e) {}
+      currentEditQuill = null;
       await loadPromotions();
     };
 
-    // Toggle active
     viewEl.querySelector(".btnTogglePromo").onclick = async () => {
       await updateDoc(doc(db, "promotions", p.id), { active: !p.active, updatedAt: serverTimestamp() });
       await loadPromotions();
     };
 
-    // Delete
     viewEl.querySelector(".btnDeletePromo").onclick = async () => {
-      if (!confirm(`Ștergi promoția "${p.text}"?`)) return;
+      if (!confirm(`Ștergi promoția "${escapeHtml(previewText.slice(0, 80))}${previewText.length > 80 ? "…" : ""}"?`)) return;
       const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js");
       await deleteDoc(doc(db, "promotions", p.id));
       await loadPromotions();
