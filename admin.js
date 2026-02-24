@@ -34,6 +34,7 @@ const $ = (id) => document.getElementById(id);
 
 let ALL_CATEGORIES = [];
 let ALL_USERS = [];
+let ALL_CLIENTS = []; // { uid, phone, email, fullName, status } for list + search
 let ALL_PRODUCTS = [];
 let ALL_COUNTIES = [];
 
@@ -225,12 +226,12 @@ onAuthStateChanged(auth, async (u) => {
       return;
     }
 
-    // Curățăm listele înainte de reload
-    const pendingEl = el("pending"); if (pendingEl) pendingEl.innerHTML = "";
-    const activeEl = el("active");  if (activeEl)  activeEl.innerHTML = "";
-
     await Promise.all([loadCategories(), loadProducts(), loadCounties()]);
     await loadUsers();
+    if (!window._clientsTabInitialized) {
+      window._clientsTabInitialized = true;
+      initClientsTab();
+    }
     await loadPromotions();
     initNotificationsSection();
     loadPasswordResetRequests();
@@ -274,27 +275,170 @@ async function loadCounties() {
   renderCountiesSection();
 }
 
+const CLIENTS_SEARCH_DEBOUNCE_MS = 300;
+const CLIENTS_STORAGE_KEY = "adminClientsSearch";
+
+function renderClientsListSkeletons(container) {
+  if (!container) return;
+  let html = "";
+  for (let i = 0; i < 6; i++) {
+    html += `<div class="client-row-skeleton"><div class="line" style="width:70%;"></div><div class="line"></div></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function matchClientSearch(c, q) {
+  if (!q || !q.trim()) return true;
+  const s = q.trim().toLowerCase();
+  const name = (c.fullName || "").toLowerCase();
+  const phone = (c.phone || "").replace(/\s/g, "");
+  const email = (c.email || "").toLowerCase();
+  const phoneNorm = s.replace(/\s/g, "");
+  return name.includes(s) || phone.includes(phoneNorm) || email.includes(s);
+}
+
+function renderClientsList() {
+  const container = $("clientsListContainer");
+  const searchInput = $("clientsSearchInput");
+  if (!container) return;
+  const q = (searchInput && searchInput.value.trim()) || "";
+  const filtered = ALL_CLIENTS.filter(c => matchClientSearch(c, q));
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="clients-empty">${q ? "Niciun client găsit." : "Niciun client."}</div>`;
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  filtered.forEach(c => {
+    const name = c.fullName?.trim() || "(fără nume)";
+    const meta = [c.phone, c.email].filter(Boolean).join(" · ") || "—";
+    const row = document.createElement("a");
+    row.href = `admin.html#client/${encodeURIComponent(c.uid)}`;
+    row.className = "client-row";
+    row.setAttribute("data-uid", c.uid);
+    row.innerHTML = `
+      <div class="client-row-main">
+        <div class="client-row-name">${escapeHtml(name)}</div>
+        <div class="client-row-meta">${escapeHtml(meta)}</div>
+      </div>
+      <span class="client-row-chevron">›</span>`;
+    row.addEventListener("click", (e) => {
+      if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        location.hash = `client/${encodeURIComponent(c.uid)}`;
+      }
+    });
+    fragment.appendChild(row);
+  });
+  container.innerHTML = "";
+  container.appendChild(fragment);
+}
+
+function setupClientsSearch() {
+  const searchInput = $("clientsSearchInput");
+  const clearBtn = $("clientsSearchClear");
+  const container = $("clientsListContainer");
+  if (!searchInput || !container) return;
+  let debounceTimer = null;
+  function applySearch() {
+    const q = searchInput.value.trim();
+    try { sessionStorage.setItem(CLIENTS_STORAGE_KEY, q); } catch (_) {}
+    if (clearBtn) {
+      clearBtn.classList.toggle("has-value", q.length > 0);
+    }
+    renderClientsList();
+  }
+  searchInput.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(applySearch, CLIENTS_SEARCH_DEBOUNCE_MS);
+  });
+  searchInput.addEventListener("search", () => { applySearch(); });
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      try { sessionStorage.removeItem(CLIENTS_STORAGE_KEY); } catch (_) {}
+      clearBtn.classList.remove("has-value");
+      searchInput.focus();
+      renderClientsList();
+    });
+  }
+  try {
+    const saved = sessionStorage.getItem(CLIENTS_STORAGE_KEY);
+    if (saved != null && saved !== "") {
+      searchInput.value = saved;
+      if (clearBtn) clearBtn.classList.add("has-value");
+    }
+  } catch (_) {}
+}
+
 async function loadUsers() {
-  $("pending").innerHTML = "";
-  $("active").innerHTML = "";
+  const container = $("clientsListContainer");
+  if (container) renderClientsListSkeletons(container);
   try {
     const allSnap = await getDocs(collection(db, "users"));
     ALL_USERS = [];
+    ALL_CLIENTS = [];
     allSnap.forEach(s => {
       const d = s.data() || {};
-      ALL_USERS.push({ uid: s.id, phone: d.phone || "", name: d.contact?.fullName || "" });
+      const uid = s.id;
+      const role = d.role || "";
+      const name = d.contact?.fullName || "";
+      ALL_USERS.push({ uid, phone: d.phone || "", name });
+      if (role === "admin") return;
+      ALL_CLIENTS.push({
+        uid,
+        phone: d.phone || "",
+        email: d.email || "",
+        fullName: name,
+        status: d.status || "pending",
+      });
     });
-
-    const pendSnap = await getDocs(query(collection(db, "users"), where("status", "==", "pending")));
-    $("pending").innerHTML = pendSnap.size ? "" : `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client în așteptare.</div>`;
-    pendSnap.forEach(s => $("pending").appendChild(renderUserCard(s.id, s.data(), true)));
-
-    const actSnap = await getDocs(query(collection(db, "users"), where("status", "==", "active")));
-    $("active").innerHTML = actSnap.size ? "" : `<div style="opacity:.6;font-size:14px;padding:10px;">Niciun client activ.</div>`;
-    actSnap.forEach(s => $("active").appendChild(renderUserCard(s.id, s.data(), false)));
+    ALL_CLIENTS.sort((a, b) => (a.fullName || a.phone || "").localeCompare(b.fullName || b.phone || ""));
+    if (container) renderClientsList();
+    const h = (location.hash || "").replace("#", "");
+    if (h.startsWith("client/")) {
+      const detailUid = decodeURIComponent(h.slice(7));
+      loadClientDetail(detailUid);
+    }
   } catch (e) {
     console.error(e);
     showMsg(e?.message || String(e), true);
+    if (container) container.innerHTML = `<div class="clients-empty">Eroare la încărcare.</div>`;
+  }
+}
+
+function initClientsTab() {
+  setupClientsSearch();
+  window.addEventListener("admin-show-client-detail", (e) => {
+    const uid = e.detail?.uid;
+    if (!uid) return;
+    loadClientDetail(uid);
+  });
+  const backBtn = $("clientDetailBack");
+  if (backBtn) {
+    backBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      location.hash = "clients";
+    });
+  }
+}
+
+async function loadClientDetail(uid) {
+  const content = $("clientDetailContent");
+  if (!content) return;
+  content.innerHTML = "<div class=\"clients-empty\">Se încarcă…</div>";
+  try {
+    const snap = await getDoc(doc(db, "users", uid));
+    if (!snap.exists()) {
+      content.innerHTML = "<div class=\"clients-empty\">Client negăsit.</div>";
+      return;
+    }
+    const data = snap.data();
+    const isPending = (data.status || "") === "pending";
+    content.innerHTML = "";
+    content.appendChild(renderUserCard(uid, data, isPending));
+  } catch (e) {
+    console.error(e);
+    content.innerHTML = `<div class="clients-empty">Eroare: ${escapeHtml(e?.message || String(e))}</div>`;
   }
 }
 
@@ -563,7 +707,7 @@ function renderUserCard(uid, u, isPending) {
       <div style="font-size:12px;font-weight:800;opacity:.6;margin-bottom:8px;">OVERRIDE PER CATEGORIE</div>
       <div style="display:grid;grid-template-columns:1fr 80px auto auto;gap:8px;align-items:center;">
         <select class="catSelect" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#0b111a;color:#fff;"></select>
-        <input class="catMarkup" type="number" step="0.01" placeholder="%" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;text-align:center;" />
+        <input class="catMarkup" type="text" inputmode="decimal" pattern="-?\d+([.,]\d+)?" placeholder="-10" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;text-align:center;" />
         <button class="setCat" style="padding:10px 12px;border-radius:10px;border:none;background:#4da3ff;color:#07111d;font-weight:800;cursor:pointer;">Set</button>
         <button class="delCat" style="padding:10px 12px;border-radius:10px;border:none;background:rgba(255,93,93,.2);color:#ff5d5d;font-weight:800;cursor:pointer;">Del</button>
       </div>
@@ -585,7 +729,7 @@ function renderUserCard(uid, u, isPending) {
       <!-- Select produs filtrat + procent -->
       <div style="display:grid;grid-template-columns:1fr 80px auto auto;gap:8px;align-items:center;margin-bottom:8px;">
         <select class="prodSelect" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#0b111a;color:#fff;font-size:14px;"></select>
-        <input class="prodMarkup" type="number" step="0.01" placeholder="%" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;text-align:center;" />
+        <input class="prodMarkup" type="text" inputmode="decimal" pattern="-?\d+([.,]\d+)?" placeholder="-10" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;text-align:center;" />
         <button class="setProd" style="padding:10px 12px;border-radius:10px;border:none;background:#4da3ff;color:#07111d;font-weight:800;cursor:pointer;">Set</button>
         <button class="delProd" style="padding:10px 12px;border-radius:10px;border:none;background:rgba(255,93,93,.2);color:#ff5d5d;font-weight:800;cursor:pointer;">Del</button>
       </div>
@@ -722,10 +866,12 @@ function renderUserCard(uid, u, isPending) {
   // ===== HANDLERS CATEGORII & PRODUSE =====
   secPrice.querySelector(".setCat").onclick = async () => {
     const catId = secPrice.querySelector(".catSelect").value;
-    const val = Number(secPrice.querySelector(".catMarkup").value);
+    const value = secPrice.querySelector(".catMarkup").value;
+    const raw = value.trim().replace(",", ".");
+    const parsed = raw === "" ? 0 : Number(raw);
     if (!catId) return alert("Selectează categoria.");
-    if (!Number.isFinite(val)) return alert("Procent invalid.");
-    await updateDoc(doc(db, "users", uid), { [`priceRules.categories.${catId}`]: val, updatedAt: serverTimestamp() });
+    if (!Number.isFinite(parsed)) return alert("Procent invalid.");
+    await updateDoc(doc(db, "users", uid), { [`priceRules.categories.${catId}`]: parsed, updatedAt: serverTimestamp() });
     await loadUsers();
   };
   secPrice.querySelector(".delCat").onclick = async () => {
@@ -736,10 +882,12 @@ function renderUserCard(uid, u, isPending) {
   };
   secPrice.querySelector(".setProd").onclick = async () => {
     const prodId = secPrice.querySelector(".prodSelect").value;
-    const val = Number(secPrice.querySelector(".prodMarkup").value);
+    const value = secPrice.querySelector(".prodMarkup").value;
+    const raw = value.trim().replace(",", ".");
+    const parsed = raw === "" ? 0 : Number(raw);
     if (!prodId) return alert("Selectează produsul.");
-    if (!Number.isFinite(val)) return alert("Procent invalid.");
-    await updateDoc(doc(db, "users", uid), { [`priceRules.products.${prodId}`]: val, updatedAt: serverTimestamp() });
+    if (!Number.isFinite(parsed)) return alert("Procent invalid.");
+    await updateDoc(doc(db, "users", uid), { [`priceRules.products.${prodId}`]: parsed, updatedAt: serverTimestamp() });
     await loadUsers();
   };
   secPrice.querySelector(".delProd").onclick = async () => {
@@ -805,6 +953,11 @@ async function saveUser(uid, uData, secGeneral, secPrice, secDelivery, secContac
   await updateDoc(doc(db, "users", uid), payload);
   alert(activate ? "Client activat!" : "Modificări salvate!");
   await loadUsers();
+  const h = (location.hash || "").replace("#", "");
+  if (h.startsWith("client/")) {
+    const detailUid = decodeURIComponent(h.slice(7));
+    if (detailUid === uid) loadClientDetail(uid);
+  }
 }
 
 // -------------------- PROMOTIONS --------------------
