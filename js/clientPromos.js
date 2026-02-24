@@ -34,6 +34,47 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+function formatPlainTextToHtml(text) {
+  const safe = escapeHtml(text || "");
+  return safe.replace(/\r\n|\r|\n/g, "<br>");
+}
+
+/** Sanitize HTML for promo display. Allowed: p, br, strong, em, u, a[href], ol, ul, li, span. Safe href only. */
+function sanitizePromoHtml(html, fallbackText) {
+  if (!html || typeof html !== "string") return escapeHtml(fallbackText || "");
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "a", "ol", "ul", "li", "span"]);
+    const safeHref = (href) => {
+      if (!href || typeof href !== "string") return false;
+      const t = href.trim().toLowerCase();
+      return t.startsWith("http://") || t.startsWith("https://") || t.startsWith("mailto:");
+    };
+    const walk = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) { node.remove(); return; }
+      const tag = node.tagName.toLowerCase();
+      if (tag === "script" || tag === "style") { node.remove(); return; }
+      if (!allowedTags.has(tag)) {
+        while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+        node.remove();
+        return;
+      }
+      const attrs = node.getAttributeNames();
+      for (const a of attrs) {
+        if (a.startsWith("on") || a === "style") { node.removeAttribute(a); continue; }
+        if (tag === "a" && a === "href") { if (!safeHref(node.getAttribute(a))) node.removeAttribute(a); continue; }
+        if (a !== "href") node.removeAttribute(a);
+      }
+      for (let i = node.childNodes.length - 1; i >= 0; i--) walk(node.childNodes[i]);
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  } catch (e) {
+    return escapeHtml(fallbackText || html || "");
+  }
+}
+
 function formatDate(ts) {
   if (!ts?.toDate) return "";
   return ts.toDate().toLocaleDateString("ro-RO", {
@@ -94,15 +135,42 @@ function renderPromos() {
 
   _allPromos.forEach(p => {
     const isUnread = !_seenPromos.includes(p.id);
+    const hasRich = !!(p.contentHtml && p.contentHtml.trim());
+    const fallbackText = p.contentText || p.text || "";
+
     const card = document.createElement("div");
     card.className = `promo-card${isUnread ? " unread" : ""}`;
-    card.innerHTML = `
-      <div class="promo-text">
-        ${escapeHtml(p.text)}
+
+    if (hasRich) {
+      const safeHtml = sanitizePromoHtml(p.contentHtml, fallbackText);
+      card.innerHTML = `
+      <div class="promo-header">
+        <span class="promo-title">Promoție</span>
         ${isUnread ? `<span class="promo-new-badge">NOU</span>` : ""}
       </div>
+      <div class="promo-text promo-text-html" style="min-width:0;">${safeHtml}</div>
       <div class="promo-meta">📅 ${formatDate(p.createdAt)}</div>
     `;
+    } else {
+      const lines = String(p.text || "").split(/\n/).map(s => s.trim()).filter(Boolean);
+      const title = lines[0] || "Promoție";
+      const bodyLines = lines.slice(1);
+      const chipMatches = (p.text || "").match(/\d+\+\d+/g) || [];
+      const chips = [...new Set(chipMatches)];
+      let bodyDisplay = bodyLines.join("\n").trim();
+      if (chips.length && bodyDisplay) {
+        bodyDisplay = bodyDisplay.replace(/\d+\+\d+/g, " ").replace(/[ \t]+/g, " ").trim() || bodyDisplay;
+      }
+      card.innerHTML = `
+      <div class="promo-header">
+        <span class="promo-title">${escapeHtml(title)}</span>
+        ${isUnread ? `<span class="promo-new-badge">NOU</span>` : ""}
+      </div>
+      ${chips.length ? `<div class="promo-chips">${chips.map(c => `<span class="promo-chip">${escapeHtml(c)}</span>`).join("")}</div>` : ""}
+      ${bodyDisplay ? `<div class="promo-text" style="min-width:0;">${formatPlainTextToHtml(bodyDisplay)}</div>` : ""}
+      <div class="promo-meta">📅 ${formatDate(p.createdAt)}</div>
+    `;
+    }
     promosList.appendChild(card);
   });
 }
