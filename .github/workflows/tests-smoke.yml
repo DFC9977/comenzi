@@ -8,9 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Setup Node
@@ -24,11 +22,30 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      - name: Run Playwright tests if they exist
+      - name: Run smoke tests
         run: |
-          if find . -type f -name "*.spec.*" | grep -q .; then
-            echo "Playwright tests found"
-            npx playwright test
+          set -e
+          echo "== Node/npm =="
+          node -v
+          npm -v
+
+          echo "== Repo root =="
+          ls -la
+
+          echo "== Find tests (spec/test files) =="
+          find . -maxdepth 5 -type f \( -name "*.spec.js" -o -name "*.test.js" -o -name "*.spec.ts" -o -name "*.test.ts" \) | sed -n '1,200p'
+
+          echo "== Playwright version =="
+          npx playwright --version
+
+          # Rulează fișierul tău dacă există, altfel rulează folderul, altfel auto-discover
+          if [ -f "tests/e2e/order-workflow.spec.js" ]; then
+            echo "Running: tests/e2e/order-workflow.spec.js"
+            CI=true SMOKE_TEST=true npx playwright test tests/e2e/order-workflow.spec.js --project=chromium --workers=2
+          elif [ -d "tests/e2e" ]; then
+            echo "Running: tests/e2e (folder)"
+            CI=true SMOKE_TEST=true npx playwright test tests/e2e --project=chromium --workers=2
           else
-            echo "No Playwright tests found — skipping"
+            echo "Running: playwright auto-discovery"
+            CI=true SMOKE_TEST=true npx playwright test --project=chromium --workers=2
           fi
