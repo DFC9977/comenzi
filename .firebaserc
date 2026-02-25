@@ -1,16 +1,1 @@
-{
-  "projects": {
-    "default": "gosbiromania",
-    "prod": "comenzi-2969b",
-    "staging": "gosbiromania"
-  },
-  "targets": {
-    "gosbiromania": {
-      "hosting": {
-        "staging": ["gosbiromania"],
-        "prod": ["comenzi-2969b"]
-      }
-    }
-  },
-  "etags": {}
-}
+{"projects":{"default":"comenzi-2969b"},"targets":{},"etags":{}}
